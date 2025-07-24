@@ -1,7 +1,3 @@
-Claro! Abaixo está a versão aprimorada e **completa** do `README.md` do projeto **EasyStock360**, seguindo boas práticas de projetos open-source no GitHub, com melhorias na organização, clareza e detalhamento técnico:
-
----
-
 # 📦 EasyStock360
 
 **EasyStock360** é um sistema web completo para **controle de estoque, vendas, clientes e finanças**, desenvolvido com **Flask (Python)** no backend, **React (JavaScript)** no frontend e **SQLite** como banco de dados local. Ideal para **micro e pequenos negócios** que buscam uma solução moderna, simples e eficaz para gestão operacional.
