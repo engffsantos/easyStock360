@@ -28,3 +28,10 @@ export const ClipboardListIcon = (props) => <IconBase d="M9 5h6M9 9h6M9 13h6M5 7
 export const DollarSignIcon = (props) => <IconBase d="M12 1v22M17 5H9.5a2.5 2.5 0 000 5h5a2.5 2.5 0 010 5H6" {...props} />;
 export const SaveIcon = (props) => <IconBase d="M17 16l-4-4m0 0l-4 4m4-4v9M4 4h16v16H4z" {...props} />;
 export const TargetIcon = (props) => <IconBase d="M12 19a7 7 0 100-14 7 7 0 000 14zM12 12V6M12 12l3 3" {...props} />;
+export const ReceiptIcon = (props) => <IconBase d="M9 2H7a2 2 0 00-2 2v16l2-1 2 1 2-1 2 1 2-1 2 1V4a2 2 0 00-2-2h-2" {...props} />;
+export const WalletIcon = (props) => <IconBase d="M3 7h18v10H3V7zm15 2a1 1 0 110 2 1 1 0 010-2z" {...props} />;
+export const MoneyIcon = (props) => <IconBase d="M4 6h16v12H4zM8 10a2 2 0 104 0 2 2 0 00-4 0z" {...props} />;
+export const ClockIcon = (props) => <IconBase d="M12 8v4l3 3m6-3a9 9 0 11-9-9" {...props} />;
+export const CalendarIcon = (props) => <IconBase d="M8 7V3M16 7V3M4 11h16M5 5h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z" {...props} />;
+export const TrendingUpIcon = (props) => <IconBase d="M3 17l6-6 4 4 8-8" {...props} />;
+export const XCircleIcon = (props) => <IconBase d="M10 10l4 4m0-4l-4 4m8-2a8 8 0 11-16 0 8 8 0 0116 0z" {...props} />;
