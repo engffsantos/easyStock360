@@ -1,7 +1,7 @@
-from flask import Blueprint, request, jsonify
-from app.models import db, Sale, SaleItem, Product, Customer, FinancialEntry, ReportGoals
-from sqlalchemy import func
 from datetime import datetime, timedelta
+
+from app.models import db, Sale, Product, FinancialEntry, ReportGoals
+from flask import Blueprint, request, jsonify
 
 reports_bp = Blueprint('reports', __name__)
 

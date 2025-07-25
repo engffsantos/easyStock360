@@ -1,26 +1,37 @@
+#backend/app/__init__.py
 from flask import Flask
+from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
-from app.models import db
-from app.routes import register_routes
+from .models import db
+from .routes.products import products_bp
+from .routes.customers import customers_bp
+from .routes.sales import sales_bp
+from .routes.financial import financial_bp
+from .routes.reports import reports_bp
 
 def create_app():
     app = Flask(__name__)
 
-    # Configuração do banco de dados SQLite (local)
+    # Caminho do banco de dados SQLite
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///../database/app.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-    # CORS para permitir requisições do frontend React
-    CORS(app)
-
-    # Inicializa o banco de dados
+    # Inicialização do banco de dados com o app Flask
     db.init_app(app)
 
-    with app.app_context():
-        # Cria as tabelas se não existirem
-        db.create_all()
+    # Configuração do CORS para permitir acesso do frontend (React)
+    CORS(app, resources={r"/api/*": {"origins": "http://localhost:3000"}})
 
-    # Registra os blueprints das rotas
-    register_routes(app)
+    # Registro dos blueprints
+    app.register_blueprint(products_bp, url_prefix='/api/products')
+    app.register_blueprint(customers_bp, url_prefix='/api/customers')
+    app.register_blueprint(sales_bp, url_prefix='/api/sales')
+    app.register_blueprint(financial_bp, url_prefix='/api/financial')
+    app.register_blueprint(reports_bp, url_prefix='/api/reports')
+
+
+    # Criação automática das tabelas
+    with app.app_context():
+        db.create_all()
 
     return app

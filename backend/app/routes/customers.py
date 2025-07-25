@@ -4,14 +4,30 @@ from sqlalchemy.exc import SQLAlchemyError
 
 customers_bp = Blueprint('customers', __name__, url_prefix='/api/customers')
 
-@customers_bp.route('', methods=['GET'])
-def get_customers():
-    customers = Customer.query.order_by(Customer.name.asc()).all()
-    return jsonify([c.to_dict() for c in customers]), 200
+# -----------------------------
+# Listar todos os clientes
+# -----------------------------
+@customers_bp.route('/', methods=['GET'])
+def list_customers():
+    try:
+        customers = Customer.query.order_by(Customer.created_at.desc()).all()
+        return jsonify([c.to_dict() for c in customers]), 200
+    except SQLAlchemyError as e:
+        return jsonify({'error': 'Erro ao buscar clientes', 'details': str(e)}), 500
 
-@customers_bp.route('', methods=['POST'])
+# -----------------------------
+# Criar novo cliente
+# -----------------------------
+@customers_bp.route('/', methods=['POST'])
 def create_customer():
     data = request.get_json()
+
+    required_fields = ['name', 'cpfCnpj', 'phone', 'address']
+    missing = [field for field in required_fields if field not in data or not data[field]]
+
+    if missing:
+        return jsonify({'error': f'Campos obrigatórios ausentes ou vazios: {", ".join(missing)}'}), 400
+
     try:
         customer = Customer(
             name=data['name'],
@@ -26,10 +42,13 @@ def create_customer():
         db.session.rollback()
         return jsonify({'error': 'Erro ao criar cliente', 'details': str(e)}), 400
 
-@customers_bp.route('/<int:customer_id>', methods=['PUT'])
+# -----------------------------
+# Atualizar cliente existente
+# -----------------------------
+@customers_bp.route('/<string:customer_id>', methods=['PUT'])
 def update_customer(customer_id):
-    data = request.get_json()
     customer = Customer.query.get_or_404(customer_id)
+    data = request.get_json()
     try:
         customer.name = data.get('name', customer.name)
         customer.cpf_cnpj = data.get('cpfCnpj', customer.cpf_cnpj)
@@ -41,7 +60,10 @@ def update_customer(customer_id):
         db.session.rollback()
         return jsonify({'error': 'Erro ao atualizar cliente', 'details': str(e)}), 400
 
-@customers_bp.route('/<int:customer_id>', methods=['DELETE'])
+# -----------------------------
+# Remover cliente
+# -----------------------------
+@customers_bp.route('/<string:customer_id>', methods=['DELETE'])
 def delete_customer(customer_id):
     customer = Customer.query.get_or_404(customer_id)
     try:

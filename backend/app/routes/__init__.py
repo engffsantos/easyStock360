@@ -1,11 +1,10 @@
-from flask import Blueprint
-
 # Importa cada módulo de rotas
 from .customers import customers_bp
-from .products import products_bp
-from .sales import sales_bp
 from .financial import financial_bp
+from .products import products_bp
 from .reports import reports_bp
+from .sales import sales_bp
+
 
 def register_routes(app):
     app.register_blueprint(customers_bp, url_prefix='/api/customers')
