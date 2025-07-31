@@ -143,3 +143,101 @@ tr:nth-child(even) {
     white-space: nowrap;
   }
 }
+@media print {
+  body * {
+    visibility: hidden !important;
+    background: none !important;
+    box-shadow: none !important;
+  }
+
+  .receipt-content,
+  .receipt-content * {
+    visibility: visible !important;
+  }
+
+  .receipt-content {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 800px;
+    background: white !important;
+    padding: 0 !important;
+    margin: 0 auto !important;
+    box-shadow: none !important;
+  }
+
+  /* --- Forçar estrutura correta de tabela --- */
+  .receipt-content table {
+    display: table !important;
+    width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+  }
+
+  .receipt-content thead {
+    display: table-header-group !important;
+  }
+
+  .receipt-content tbody {
+    display: table-row-group !important;
+  }
+
+  .receipt-content tfoot {
+    display: table-footer-group !important;
+  }
+
+  .receipt-content tr {
+    display: table-row !important;
+  }
+
+  .receipt-content th,
+  .receipt-content td {
+    display: table-cell !important;
+    vertical-align: middle !important;
+    border: 1px solid black !important;
+    padding: 6px !important;
+  }
+
+  /* Larguras e alinhamentos */
+  .receipt-content th:nth-child(1),
+  .receipt-content td:nth-child(1) {
+    width: 40%;
+    text-align: left !important;
+  }
+
+  .receipt-content th:nth-child(2),
+  .receipt-content td:nth-child(2) {
+    width: 15%;
+    text-align: right !important;
+  }
+
+  .receipt-content th:nth-child(3),
+  .receipt-content td:nth-child(3) {
+    width: 20%;
+    text-align: right !important;
+  }
+
+  .receipt-content th:nth-child(4),
+  .receipt-content td:nth-child(4) {
+    width: 25%;
+    text-align: right !important;
+  }
+
+  .receipt-content thead {
+    background: #f0f0f0 !important;
+    font-weight: bold !important;
+  }
+
+  @page {
+    margin: 1cm;
+    size: auto;
+  }
+
+  html, body {
+    overflow: visible !important;
+  }
+}
+
+

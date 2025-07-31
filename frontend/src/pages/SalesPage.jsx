@@ -91,6 +91,18 @@ const SalesPage = ({ onNavigateToReceipt }) => {
     }
   };
 
+  const handleCancelSale = async (saleId) => {
+    if (window.confirm('Deseja realmente cancelar esta venda?')) {
+      try {
+        await api.cancelSale(saleId);
+        alert('Venda cancelada com sucesso.');
+        fetchData();
+      } catch (err) {
+        alert('Erro ao cancelar a venda.');
+      }
+    }
+  };
+
   const TabButton = ({ label, isActive, onClick, count }) => (
     <button
       onClick={onClick}
@@ -112,30 +124,55 @@ const SalesPage = ({ onNavigateToReceipt }) => {
       <table className="min-w-full divide-y divide-base-200">
         <thead className="bg-white">
           <tr>
-            <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">Data</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">Cliente</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">Itens</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">Total</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">Ações</th>
+            <th className="px-6 py-3 text-left text-xs text-base-300 uppercase">Data</th>
+            <th className="px-6 py-3 text-left text-xs text-base-300 uppercase">Cliente</th>
+            <th className="px-6 py-3 text-left text-xs text-base-300 uppercase">Itens</th>
+            <th className="px-6 py-3 text-left text-xs text-base-300 uppercase">Total</th>
+            <th className="px-6 py-3 text-left text-xs text-base-300 uppercase">Ações</th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-base-200">
           {sales.length > 0 ? (
-            sales.map(sale => (
-              <tr key={sale.id}>
+            sales.map((sale) => (
+              <tr
+                key={sale.id}
+                className={sale.status === 'CANCELLED' ? 'opacity-50 line-through' : ''}
+              >
                 <td className="px-6 py-4 text-sm text-base-300">{formatDate(sale.createdAt)}</td>
-                <td className="px-6 py-4 text-sm font-medium text-base-400">{sale.customerName}</td>
-                <td className="px-6 py-4 text-sm text-base-300">{sale.items.length}</td>
+                <td className="px-6 py-4 text-sm text-base-400">{sale.customerName || 'Consumidor Final'}</td>
+                <td className="px-6 py-4 text-sm text-base-300">{(sale.items || []).length}</td>
                 <td className="px-6 py-4 text-sm font-bold text-primary-800">{formatCurrency(sale.total)}</td>
-                <td className="px-6 py-4">
-                  <Button variant="secondary" className="!py-1 !px-2" onClick={() => onNavigateToReceipt(sale.id)}>
+                <td className="px-6 py-4 flex flex-wrap gap-2">
+                  <Button
+                    variant="secondary"
+                    className="!py-1 !px-2"
+                    onClick={() => {
+                      if (typeof onNavigateToReceipt === 'function') {
+                        onNavigateToReceipt(sale.id);
+                      }
+                    }}
+                    aria-label={`Ver recibo da venda de ${sale.customerName || 'cliente'}`}
+                  >
                     Ver Recibo
                   </Button>
+                  {sale.status !== 'CANCELLED' && (
+                    <Button
+                      variant="danger"
+                      className="!py-1 !px-2"
+                      onClick={() => handleCancelSale(sale.id)}
+                    >
+                      Cancelar
+                    </Button>
+                  )}
                 </td>
               </tr>
             ))
           ) : (
-            <tr><td colSpan="5" className="text-center py-12 text-base-300">Nenhuma venda registrada.</td></tr>
+            <tr>
+              <td colSpan="5" className="text-center py-12 text-base-300">
+                Nenhuma venda registrada.
+              </td>
+            </tr>
           )}
         </tbody>
       </table>
@@ -147,10 +184,10 @@ const SalesPage = ({ onNavigateToReceipt }) => {
       <table className="min-w-full divide-y divide-base-200">
         <thead className="bg-white">
           <tr>
-            <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">Data</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">Cliente</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">Total</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">Ações</th>
+            <th className="px-6 py-3 text-left text-xs text-base-300 uppercase">Data</th>
+            <th className="px-6 py-3 text-left text-xs text-base-300 uppercase">Cliente</th>
+            <th className="px-6 py-3 text-left text-xs text-base-300 uppercase">Total</th>
+            <th className="px-6 py-3 text-left text-xs text-base-300 uppercase">Ações</th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-base-200">
@@ -158,10 +195,10 @@ const SalesPage = ({ onNavigateToReceipt }) => {
             quotes.map(quote => (
               <tr key={quote.id}>
                 <td className="px-6 py-4 text-sm text-base-300">{formatDate(quote.createdAt)}</td>
-                <td className="px-6 py-4 text-sm font-medium text-base-400">{quote.customerName}</td>
+                <td className="px-6 py-4 text-sm text-base-400">{quote.customerName || 'Consumidor Final'}</td>
                 <td className="px-6 py-4 text-sm font-bold text-primary-800">{formatCurrency(quote.total)}</td>
                 <td className="px-6 py-4">
-                  <div className="flex gap-2 items-center">
+                  <div className="flex gap-2 items-center flex-wrap">
                     <Button onClick={() => setQuoteToConvert(quote)} className="!py-1 !px-2 text-sm bg-secondary-600 text-white">
                       <CheckCircleIcon className="w-4 h-4" /> Converter
                     </Button>
@@ -232,7 +269,6 @@ const SalesPage = ({ onNavigateToReceipt }) => {
         >
           <div className="space-y-4">
             <p>Confirme os detalhes de pagamento para converter este orçamento em uma venda.</p>
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block mb-1 text-sm text-base-300">Forma de pagamento</label>

@@ -207,3 +207,13 @@ def convert_quote_to_sale(id):
     except SQLAlchemyError as e:
         db.session.rollback()
         return jsonify({'error': 'Erro ao converter orçamento', 'details': str(e)}), 500
+
+# PUT /api/sales/<id>/cancel - Marca uma venda como cancelada
+@sales_bp.route('/<id>/cancel', methods=['PUT'])
+def cancel_sale(id):
+    sale = Sale.query.get_or_404(id)
+    if sale.status != 'COMPLETED':
+        return jsonify({'error': 'Somente vendas podem ser canceladas'}), 400
+    sale.status = 'CANCELLED'
+    db.session.commit()
+    return jsonify({'message': 'Venda cancelada com sucesso'})

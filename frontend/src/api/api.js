@@ -24,6 +24,7 @@ export const api = {
   updateTransaction: (id, data) => axios.put(`${BASE_URL}/sales/${id}/`, data),
   deleteTransaction: (id) => axios.delete(`${BASE_URL}/sales/${id}/`),
   convertToSale: (id, paymentDetails) => axios.post(`${BASE_URL}/sales/${id}/convert/`, paymentDetails),
+  cancelSale: (id) => axios.put(`${BASE_URL}/sales/${id}/cancel`),
 
   // Financial
   getFinancialEntries: () => axios.get(`${BASE_URL}/financial/`).then(res => res.data),
