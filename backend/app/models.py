@@ -9,21 +9,22 @@ db = SQLAlchemy()
 def generate_uuid():
     return str(uuid.uuid4())
 
+def generate_sku():
+    # Gerador de SKU simplificado com base na data/hora atual
+    return f"SKU-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
+
 # -----------------------------
-# Customer
+# Customer (mantido igual)
 # -----------------------------
 class Customer(db.Model):
     __tablename__ = 'customers'
 
-    id = db.Column(db.String, primary_key=True, default=generate_uuid)
-    name = db.Column(db.String, nullable=False)
-    cpf_cnpj = db.Column(db.String, nullable=False, unique=True)
-    phone = db.Column(db.String, nullable=False)
-    address = db.Column(db.String, nullable=False)
+    id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
+    name = db.Column(db.String(100), nullable=False)
+    cpf_cnpj = db.Column(db.String(20), nullable=False, unique=True)
+    phone = db.Column(db.String(20), nullable=False)
+    address = db.Column(db.String(200), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    interactions = db.relationship('CustomerInteraction', backref='customer', lazy=True)
-    sales = db.relationship('Sale', backref='customer', lazy=True)
 
     def to_dict(self):
         return {
@@ -35,11 +36,8 @@ class Customer(db.Model):
             'createdAt': self.created_at.isoformat()
         }
 
-    def __repr__(self):
-        return f"<Customer {self.name}>"
-
 # -----------------------------
-# CustomerInteraction
+# CustomerInteraction (mantido igual)
 # -----------------------------
 class CustomerInteraction(db.Model):
     __tablename__ = 'customer_interactions'
@@ -51,22 +49,39 @@ class CustomerInteraction(db.Model):
     date = db.Column(db.DateTime, default=datetime.utcnow)
 
 # -----------------------------
-# Product
+# Product (com novos campos)
 # -----------------------------
 class Product(db.Model):
     __tablename__ = 'products'
 
     id = db.Column(db.String, primary_key=True, default=generate_uuid)
     name = db.Column(db.String, nullable=False)
-    sku = db.Column(db.String, nullable=False, unique=True)
+    sku = db.Column(db.String, nullable=False, unique=True, default=generate_sku)
+    marca = db.Column(db.String, nullable=False)  # obrigatório
+    tipo = db.Column(db.String, nullable=True)    # opcional
     price = db.Column(db.Float, nullable=False)
     cost = db.Column(db.Float, nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
     min_stock = db.Column(db.Integer, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    history = db.relationship('ProductHistory', backref='product', lazy=True)
+
 # -----------------------------
-# Sale
+# ProductHistory (novo modelo)
+# -----------------------------
+class ProductHistory(db.Model):
+    __tablename__ = 'product_history'
+
+    id = db.Column(db.String, primary_key=True, default=generate_uuid)
+    product_id = db.Column(db.String, db.ForeignKey('products.id'), nullable=False)
+    changed_at = db.Column(db.DateTime, default=datetime.utcnow)
+    changed_field = db.Column(db.String, nullable=False)
+    old_value = db.Column(db.String, nullable=True)
+    new_value = db.Column(db.String, nullable=True)
+
+# -----------------------------
+# Sale (mantido igual)
 # -----------------------------
 class Sale(db.Model):
     __tablename__ = 'sales'
@@ -81,7 +96,7 @@ class Sale(db.Model):
     items = db.relationship('SaleItem', backref='sale', lazy=True)
 
 # -----------------------------
-# SaleItem
+# SaleItem (mantido igual)
 # -----------------------------
 class SaleItem(db.Model):
     __tablename__ = 'sale_items'
@@ -94,7 +109,7 @@ class SaleItem(db.Model):
     price = db.Column(db.Float, nullable=False)
 
 # -----------------------------
-# FinancialEntry
+# FinancialEntry (mantido igual)
 # -----------------------------
 class FinancialEntry(db.Model):
     __tablename__ = 'financial_entries'
@@ -109,7 +124,7 @@ class FinancialEntry(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 # -----------------------------
-# ReportGoals
+# ReportGoals (mantido igual)
 # -----------------------------
 class ReportGoals(db.Model):
     __tablename__ = 'report_goals'

@@ -15,10 +15,13 @@ export const Button = ({ children, variant = 'primary', className = '', ...props
   };
   return (
     <button className={`${base} ${variants[variant]} ${className}`} {...props}>
-      {children}
+      <span className="inline-flex items-center gap-2">
+        {children}
+      </span>
     </button>
   );
 };
+
 
 export const Input = ({ id, label, ...props }) => (
   <div className="flex flex-col gap-1">

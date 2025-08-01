@@ -1,8 +1,10 @@
 // frontend/src/pages/SaleForm.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../api/api';
-import { Card, Button, Input, Spinner } from '../components/common';
-import { TrashIcon } from '../components/icons';
+import { Card, Button, Input, Spinner, ModalWrapper } from '../components/common';
+import { TrashIcon, PlusIcon } from '../components/icons';
+import Select from 'react-select';
+import CustomerForm from './CustomersPage'; // Ajuste aqui conforme onde o CustomerForm foi exportado
 
 const PAYMENT_METHODS = {
   PIX: 'PIX',
@@ -31,6 +33,24 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
   const [currentItem, setCurrentItem] = useState({ productId: '', quantity: 1 });
   const [itemError, setItemError] = useState('');
 
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
+  const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
+
+  const handleCreateCustomer = async (customerData) => {
+    setIsCreatingCustomer(true);
+    try {
+      const saved = await api.addCustomer(customerData);
+      const updatedCustomers = await api.getCustomers();
+      setCustomers(updatedCustomers);
+      setSelectedCustomerId(saved.id);
+      setIsCustomerModalOpen(false);
+    } catch (e) {
+      alert('Erro ao cadastrar cliente.');
+    } finally {
+      setIsCreatingCustomer(false);
+    }
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -47,7 +67,6 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
         setLoading(false);
       }
     };
-
     fetchData();
   }, []);
 
@@ -63,24 +82,22 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
     return products.find(p => p.id === currentItem.productId);
   }, [currentItem.productId, products]);
 
+  const customerOptions = useMemo(() => {
+    return customers.map(c => ({
+      value: c.id,
+      label: `${c.name} - ${c.cpfCnpj}`,
+      tokens: `${c.name} ${c.cpfCnpj} ${c.phone}`.toLowerCase()
+    }));
+  }, [customers]);
+
   const handleAddItem = () => {
     setItemError('');
-    if (!selectedProduct) {
-      setItemError('Selecione um produto.');
-      return;
-    }
-    if (currentItem.quantity <= 0) {
-      setItemError('Quantidade deve ser maior que zero.');
-      return;
-    }
-    if (formType === 'COMPLETED' && currentItem.quantity > selectedProduct.quantity) {
-      setItemError(`Estoque insuficiente. Disponível: ${selectedProduct.quantity}.`);
-      return;
-    }
-    if (saleItems.some(item => item.productId === selectedProduct.id)) {
-      setItemError('Produto já adicionado.');
-      return;
-    }
+    if (!selectedProduct) return setItemError('Selecione um produto.');
+    if (currentItem.quantity <= 0) return setItemError('Quantidade deve ser maior que zero.');
+    if (formType === 'COMPLETED' && currentItem.quantity > selectedProduct.quantity)
+      return setItemError(`Estoque insuficiente. Disponível: ${selectedProduct.quantity}.`);
+    if (saleItems.some(item => item.productId === selectedProduct.id))
+      return setItemError('Produto já adicionado.');
 
     setSaleItems(prev => [
       ...prev,
@@ -91,7 +108,6 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
         price: selectedProduct.price,
       },
     ]);
-
     setCurrentItem({ productId: '', quantity: 1 });
   };
 
@@ -105,11 +121,7 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (saleItems.length === 0) {
-      alert('Adicione pelo menos um item.');
-      return;
-    }
+    if (saleItems.length === 0) return alert('Adicione pelo menos um item.');
 
     const customer = customers.find(c => c.id === selectedCustomerId);
     const payload = {
@@ -127,7 +139,7 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
         await api.addTransaction(payload);
       }
       onSave();
-    } catch (err) {
+    } catch {
       alert('Erro ao salvar transação');
     }
   };
@@ -153,17 +165,36 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
 
         <div>
           <label className="block mb-1 text-sm text-base-300">Cliente</label>
-          <select
-            value={selectedCustomerId}
-            onChange={(e) => setSelectedCustomerId(e.target.value)}
-            className="w-full p-2 border rounded"
-          >
-            <option value="">Consumidor Final</option>
-            {customers.map(c => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
+          <div className="flex gap-2 items-center">
+            <Select
+              options={customerOptions}
+              onChange={(selected) => setSelectedCustomerId(selected?.value || '')}
+              value={customerOptions.find(o => o.value === selectedCustomerId) || null}
+              placeholder="Selecione o cliente"
+              isClearable
+              filterOption={(option, input) => option.data.tokens.includes(input.toLowerCase())}
+              className="w-full"
+            />
+            <Button variant="primary" onClick={() => setIsCustomerModalOpen(true)}>
+              <span className="inline-flex items-center gap-2">
+                <PlusIcon /> Novo Cliente
+              </span>
+            </Button>
+          </div>
         </div>
+
+        <ModalWrapper
+          isOpen={isCustomerModalOpen}
+          onClose={() => setIsCustomerModalOpen(false)}
+          title="Adicionar Cliente"
+        >
+          <CustomerForm
+            customer={null}
+            onSave={handleCreateCustomer}
+            onClose={() => setIsCustomerModalOpen(false)}
+            isSaving={isCreatingCustomer}
+          />
+        </ModalWrapper>
 
         {formType === 'COMPLETED' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
@@ -192,7 +223,6 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
           </div>
         )}
       </Card>
-
       <Card className="!p-4">
         <h3 className="font-bold mb-2">Adicionar Itens</h3>
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">

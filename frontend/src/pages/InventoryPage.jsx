@@ -6,10 +6,13 @@ import { PlusIcon, EditIcon, TrashIcon, SearchIcon, AlertTriangleIcon } from '..
 const formatCurrency = (value) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
+
 const ProductForm = ({ product, onSave, onClose, isSaving }) => {
   const [formData, setFormData] = useState({
     name: '',
     sku: '',
+    marca: '',
+    tipo: '',
     price: 0,
     cost: 0,
     quantity: 0,
@@ -22,13 +25,15 @@ const ProductForm = ({ product, onSave, onClose, isSaving }) => {
       setFormData({
         name: product.name || '',
         sku: product.sku || '',
+        marca: product.marca || '',
+        tipo: product.tipo || '',
         price: product.price || 0,
         cost: product.cost || 0,
         quantity: product.quantity || 0,
         minStock: product.minStock || 0,
       });
     } else {
-      setFormData({ name: '', sku: '', price: 0, cost: 0, quantity: 0, minStock: 0 });
+      setFormData({ name: '', sku: '', marca: '', tipo: '', price: 0, cost: 0, quantity: 0, minStock: 0 });
     }
     setErrors({});
   }, [product]);
@@ -36,8 +41,8 @@ const ProductForm = ({ product, onSave, onClose, isSaving }) => {
   const validate = () => {
     const newErrors = {};
     if (!formData.name.trim()) newErrors.name = 'Nome é obrigatório.';
-    if (!formData.sku.trim()) newErrors.sku = 'SKU é obrigatório.';
     if (formData.price <= 0) newErrors.price = 'Preço deve ser positivo.';
+    if (!formData.marca.trim()) newErrors.marca = 'Marca é obrigatória.';
     if (formData.cost < 0) newErrors.cost = 'Custo não pode ser negativo.';
     if (formData.quantity < 0) newErrors.quantity = 'Quantidade não pode ser negativa.';
     if (formData.minStock < 0) newErrors.minStock = 'Estoque mínimo não pode ser negativo.';
@@ -65,8 +70,12 @@ const ProductForm = ({ product, onSave, onClose, isSaving }) => {
       <Input id="name" name="name" label="Nome do Produto" value={formData.name} onChange={handleChange} required />
       {errors.name && <p className="text-danger text-sm">{errors.name}</p>}
 
-      <Input id="sku" name="sku" label="SKU (Código de Barras)" value={formData.sku} onChange={handleChange} required />
-      {errors.sku && <p className="text-danger text-sm">{errors.sku}</p>}
+      <Input id="sku" name="sku" label="SKU (automático se vazio)" value={formData.sku} onChange={handleChange} />
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Input id="marca" name="marca" label="Marca" value={formData.marca} onChange={handleChange} required />
+        <Input id="tipo" name="tipo" label="Tipo (opcional)" value={formData.tipo} onChange={handleChange} />
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Input id="cost" name="cost" label="Custo (R$)" type="number" step="0.01" value={formData.cost} onChange={handleChange} required />
@@ -74,11 +83,6 @@ const ProductForm = ({ product, onSave, onClose, isSaving }) => {
         <Input id="quantity" name="quantity" label="Quantidade" type="number" value={formData.quantity} onChange={handleChange} required />
         <Input id="minStock" name="minStock" label="Estoque Mínimo" type="number" value={formData.minStock} onChange={handleChange} required />
       </div>
-
-      {errors.cost && <p className="text-danger text-sm">{errors.cost}</p>}
-      {errors.price && <p className="text-danger text-sm">{errors.price}</p>}
-      {errors.quantity && <p className="text-danger text-sm">{errors.quantity}</p>}
-      {errors.minStock && <p className="text-danger text-sm">{errors.minStock}</p>}
 
       <div className="flex justify-end gap-3 pt-4">
         <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>Cancelar</Button>
@@ -89,6 +93,8 @@ const ProductForm = ({ product, onSave, onClose, isSaving }) => {
     </form>
   );
 };
+
+// Restante do InventoryPage.jsx permanece igual, não necessita alteração.
 
 const InventoryPage = ({ filters }) => {
   const [products, setProducts] = useState([]);

@@ -16,6 +16,7 @@ export const ChartBarIcon = (props) => <IconBase d="M3 3v18h18M9 17V9m4 8V5m4 12
 export const PlusIcon = (props) => <IconBase d="M12 4v16m8-8H4" {...props} />;
 export const TrashIcon = (props) => <IconBase d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4h6v3" {...props} />;
 export const EditIcon = (props) => <IconBase d="M11 5h7M5 12l4 4L19 6" {...props} />;
+
 export const CloseIcon = (props) => <IconBase d="M6 18L18 6M6 6l12 12" {...props} />;
 export const SearchIcon = (props) => <IconBase d="M21 21l-4.35-4.35M11 5a6 6 0 100 12 6 6 0 000-12z" {...props} />;
 export const AlertTriangleIcon = (props) => <IconBase d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4m0 4h.01" {...props} />;

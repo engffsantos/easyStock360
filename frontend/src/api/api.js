@@ -7,8 +7,8 @@ export const api = {
   // Customers
   getCustomers: () => axios.get(`${BASE_URL}/customers/`).then(res => res.data),
   addCustomer: (data) => axios.post(`${BASE_URL}/customers/`, data),
-  updateCustomer: (id, data) => axios.put(`${BASE_URL}/customers/${id}/`, data),
-  deleteCustomer: (id) => axios.delete(`${BASE_URL}/customers/${id}/`),
+  updateCustomer: (id, data) => axios.put(`${BASE_URL}/customers/${id}`, data),
+  deleteCustomer: (id) => axios.delete(`${BASE_URL}/customers/${id}`),
 
   // Products
   getProducts: () => axios.get(`${BASE_URL}/products/`).then(res => res.data),
@@ -27,10 +27,10 @@ export const api = {
   cancelSale: (id) => axios.put(`${BASE_URL}/sales/${id}/cancel`),
 
   // Financial
-  getFinancialEntries: () => axios.get(`${BASE_URL}/financial/`).then(res => res.data),
-  addFinancialEntry: (data) => axios.post(`${BASE_URL}/financial/`, data),
-  markFinancialEntryAsPaid: (id) => axios.post(`${BASE_URL}/financial/${id}/pay/`),
-  deleteFinancialEntry: (id) => axios.delete(`${BASE_URL}/financial/${id}/`),
+  getFinancialEntries: () => axios.get(`${BASE_URL}/financial`).then(res => res.data),
+  addFinancialEntry: (data) => axios.post(`${BASE_URL}/financial`, data),
+  markFinancialEntryAsPaid: (id) => axios.post(`${BASE_URL}/financial/${id}/pay`),
+  deleteFinancialEntry: (id) => axios.delete(`${BASE_URL}/financial/${id}`),
 
   // Reports
   getReportsData: (start, end) =>
