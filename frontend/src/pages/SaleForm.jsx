@@ -4,7 +4,7 @@ import { api } from '../api/api';
 import { Card, Button, Input, Spinner, ModalWrapper } from '../components/common';
 import { TrashIcon, PlusIcon } from '../components/icons';
 import Select from 'react-select';
-import CustomerForm from './CustomersPage'; // Ajuste aqui conforme onde o CustomerForm foi exportado
+import CustomerForm from './CustomerForm';
 
 const PAYMENT_METHODS = {
   PIX: 'PIX',
@@ -15,10 +15,7 @@ const PAYMENT_METHODS = {
 };
 
 const formatCurrency = (value) =>
-  new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(value);
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
 const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
   const [products, setProducts] = useState([]);
@@ -39,13 +36,20 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
   const handleCreateCustomer = async (customerData) => {
     setIsCreatingCustomer(true);
     try {
-      const saved = await api.addCustomer(customerData);
+      const { data: saved } = await api.addCustomer(customerData); // ✅ Corrigido aqui
       const updatedCustomers = await api.getCustomers();
       setCustomers(updatedCustomers);
-      setSelectedCustomerId(saved.id);
+
+      // Aguarda lista ser atualizada antes de setar cliente
+      setTimeout(() => {
+        setSelectedCustomerId(saved.id);
+      }, 100);
+
       setIsCustomerModalOpen(false);
     } catch (e) {
-      alert('Erro ao cadastrar cliente.');
+      console.error('Erro ao cadastrar cliente:', e);
+      alert(e.response?.data?.error || 'Erro ao cadastrar cliente.');
+      setIsCustomerModalOpen(true);
     } finally {
       setIsCreatingCustomer(false);
     }
@@ -139,7 +143,8 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
         await api.addTransaction(payload);
       }
       onSave();
-    } catch {
+    } catch (e) {
+      console.error('Erro ao salvar transação:', e);
       alert('Erro ao salvar transação');
     }
   };
@@ -217,12 +222,13 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
                 min="1"
                 value={paymentDetails.installments}
                 onChange={e => setPaymentDetails(p => ({ ...p, installments: parseInt(e.target.value) || 1 }))}
-                disabled={paymentDetails.paymentMethod !== 'CARTAO_CREDITO' && paymentDetails.paymentMethod !== 'BOLETO'}
+                disabled={!['CARTAO_CREDITO', 'BOLETO'].includes(paymentDetails.paymentMethod)}
               />
             </div>
           </div>
         )}
       </Card>
+
       <Card className="!p-4">
         <h3 className="font-bold mb-2">Adicionar Itens</h3>
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">

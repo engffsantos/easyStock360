@@ -6,7 +6,7 @@ financial_bp = Blueprint('financial', __name__)
 
 
 # GET /api/financial/ - Lista todos os lançamentos
-@financial_bp.route('/', methods=['GET'])
+@financial_bp.route('', methods=['GET'])
 def list_entries():
     entries = FinancialEntry.query.order_by(FinancialEntry.due_date).all()
     return jsonify([

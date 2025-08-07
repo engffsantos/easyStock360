@@ -1,3 +1,4 @@
+#backend/app/routes/__init__.py
 # Importa cada módulo de rotas
 from .customers import customers_bp
 from .financial import financial_bp
