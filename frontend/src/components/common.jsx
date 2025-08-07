@@ -22,7 +22,6 @@ export const Button = ({ children, variant = 'primary', className = '', ...props
   );
 };
 
-
 export const Input = ({ id, label, ...props }) => (
   <div className="flex flex-col gap-1">
     {label && <label htmlFor={id} className="text-sm text-base-300">{label}</label>}
@@ -60,3 +59,14 @@ export const ProgressBar = ({ value, max }) => {
     </div>
   );
 };
+
+export const Select = ({ id, label, options = [], ...props }) => (
+  <div className="flex flex-col gap-1">
+    {label && <label htmlFor={id} className="text-sm text-base-300">{label}</label>}
+    <select id={id} className="px-3 py-2 border border-base-200 rounded-xl text-sm focus:outline-primary-700" {...props}>
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>{option.label}</option>
+      ))}
+    </select>
+  </div>
+);
