@@ -1,11 +1,23 @@
 //frontend/src/pages/ReportsPage.jsx
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/api';
-import { Card, Button, Input, Spinner, ModalWrapper, Select } from '../components/common';
-import { TargetIcon, SaveIcon, ChartBarIcon, BoxIcon, DownloadIcon, PrintIcon } from '../components/icons';
+import { Card, Input, Spinner, ModalWrapper, Select } from '../components/common';
+import { TargetIcon, SaveIcon, ChartBarIcon, DownloadIcon, PrintIcon } from '../components/icons';
 
 const formatCurrency = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 const formatDate = (date) => new Date(date).toLocaleDateString('pt-BR');
+
+const Button = ({ children, onClick, type = 'button', variant = 'primary', className = '', ...props }) => {
+  const baseStyle = 'px-4 py-2 rounded text-white flex items-center';
+  const style = variant === 'secondary'
+    ? 'bg-base-400 hover:brightness-110'
+    : 'bg-[rgb(var(--color-primary-600))] hover:brightness-110';
+  return (
+    <button type={type} onClick={onClick} className={`${baseStyle} ${style} ${className}`} {...props}>
+      {children}
+    </button>
+  );
+};
 
 const ProgressBar = ({ value, max }) => {
   const percent = Math.min(100, (value / max) * 100);
@@ -61,7 +73,7 @@ const ReportsPage = () => {
     try {
       const report = await api.getReportsData(start, end);
       setReportData(report);
-    } catch (err) {
+    } catch {
       alert('Erro ao carregar relatório');
     } finally {
       setLoading(false);
@@ -72,7 +84,7 @@ const ReportsPage = () => {
     try {
       const company = await api.getCompanyInfo();
       setLogoBase64(company.logoBase64);
-    } catch (err) {
+    } catch {
       console.warn('Logo não encontrada');
     }
   };
@@ -81,7 +93,7 @@ const ReportsPage = () => {
     try {
       const response = await api.getProducts();
       setProducts(response);
-    } catch (err) {
+    } catch {
       alert('Erro ao carregar produtos');
     }
   };
@@ -135,7 +147,7 @@ const ReportsPage = () => {
       </div>
       <table className="min-w-full text-sm">
         <thead>
-          <tr className="text-left text-base-300">
+          <tr className="text-left ">
             <th className="p-2">Produto</th>
             <th className="p-2">SKU</th>
             <th className="p-2 text-center">Qtd. Estoque</th>
@@ -149,7 +161,7 @@ const ReportsPage = () => {
             return (
               <tr key={p.id} className="border-t">
                 <td className="p-2 font-medium text-base-400">{p.name}</td>
-                <td className="p-2 font-mono text-base-300">{p.sku}</td>
+                <td className="p-2 font-mono ">{p.sku}</td>
                 <td className="p-2 text-center">{p.quantity}</td>
                 <td className="p-2 text-center">{p.min_stock}</td>
                 <td className={`p-2 font-semibold ${isLow ? 'text-red-600' : 'text-green-600'}`}>{isLow ? 'Abaixo do mínimo' : 'OK'}</td>
@@ -161,7 +173,6 @@ const ReportsPage = () => {
     </ReportCard>
   );
 
-
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -170,8 +181,8 @@ const ReportsPage = () => {
       </div>
 
       <div className="flex space-x-4 border-b pb-2">
-        <button className={`text-sm font-medium ${activeTab === 'gerencial' ? 'text-primary-600 border-b-2 border-primary-600' : 'text-base-300'}`} onClick={() => setActiveTab('gerencial')}>Relatório Gerencial</button>
-        <button className={`text-sm font-medium ${activeTab === 'estoque' ? 'text-primary-600 border-b-2 border-primary-600' : 'text-base-300'}`} onClick={() => setActiveTab('estoque')}>Relatório de Estoque</button>
+        <button className={`text-sm font-medium ${activeTab === 'gerencial' ? 'text-primary-600 border-b-2 border-primary-600' : ''}`} onClick={() => setActiveTab('gerencial')}>Relatório Gerencial</button>
+        <button className={`text-sm font-medium ${activeTab === 'estoque' ? 'text-primary-600 border-b-2 border-primary-600' : ''}`} onClick={() => setActiveTab('estoque')}>Relatório de Estoque</button>
       </div>
 
       {activeTab === 'gerencial' && (
@@ -194,25 +205,25 @@ const ReportsPage = () => {
               <ReportCard title="Resumo do Período">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   <div>
-                    <p className="text-sm text-base-300">Receita Total</p>
+                    <p className="text-sm ">Receita Total</p>
                     <p className="font-bold text-2xl text-primary-600">{formatCurrency(reportData.summary.totalRevenue)}</p>
                     <ProgressBar value={reportData.summary.totalRevenue} max={reportData.goals.monthlyRevenue} />
                   </div>
                   <div>
-                    <p className="text-sm text-base-300">Lucro Total</p>
+                    <p className="text-sm ">Lucro Total</p>
                     <p className="font-bold text-2xl text-green-600">{formatCurrency(reportData.summary.totalProfit)}</p>
                     <ProgressBar value={reportData.summary.totalProfit} max={reportData.goals.monthlyProfit} />
                   </div>
                   <div>
-                    <p className="text-sm text-base-300">Custo Total</p>
+                    <p className="text-sm ">Custo Total</p>
                     <p className="font-bold text-2xl text-yellow-600">{formatCurrency(reportData.summary.totalCost)}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-base-300">Vendas Realizadas</p>
+                    <p className="text-sm ">Vendas Realizadas</p>
                     <p className="font-bold text-xl">{reportData.summary.salesCount}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-base-300">Ticket Médio</p>
+                    <p className="text-sm ">Ticket Médio</p>
                     <p className="font-bold text-xl">{formatCurrency(reportData.summary.averageTicket)}</p>
                   </div>
                 </div>
@@ -222,7 +233,7 @@ const ReportsPage = () => {
                 {reportData.defaultingCustomers.length > 0 ? (
                   <table className="min-w-full text-sm">
                     <thead>
-                      <tr className="text-left text-base-300">
+                      <tr className="text-left ">
                         <th className="p-2">Cliente</th>
                         <th className="p-2">Valor</th>
                         <th className="p-2">Vencimento</th>
@@ -238,7 +249,7 @@ const ReportsPage = () => {
                       ))}
                     </tbody>
                   </table>
-                ) : <p className="text-base-300">Sem inadimplentes no período.</p>}
+                ) : <p className="">Sem inadimplentes no período.</p>}
               </ReportCard>
             </>
           )}

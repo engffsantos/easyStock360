@@ -1,11 +1,34 @@
+// frontend/src/pages/InventoryPage.jsx
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { api } from '../api/api';
-import { Card, Button, Input, ModalWrapper, Spinner } from '../components/common';
+import { Card, Input, ModalWrapper, Spinner } from '../components/common';
 import { PlusIcon, EditIcon, TrashIcon, SearchIcon, AlertTriangleIcon } from '../components/icons';
+
+const PrimaryButton = ({ children, onClick, type = 'button', className = '', ...props }) => (
+  <button
+    type={type}
+    onClick={onClick}
+    className={`px-4 py-2 rounded text-white flex items-center gap-2 ${className}`}
+    style={{ backgroundColor: 'rgb(var(--color-primary-600))' }}
+    {...props}
+  >
+    {children}
+  </button>
+);
+
+const SecondaryButton = ({ children, onClick, type = 'button', className = '', ...props }) => (
+  <button
+    type={type}
+    onClick={onClick}
+    className={`px-4 py-2 rounded text-white bg-base-400 hover:brightness-110 flex items-center gap-2 ${className}`}
+    {...props}
+  >
+    {children}
+  </button>
+);
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
-
 
 const ProductForm = ({ product, onSave, onClose, isSaving }) => {
   const [formData, setFormData] = useState({
@@ -85,18 +108,16 @@ const ProductForm = ({ product, onSave, onClose, isSaving }) => {
       </div>
 
       <div className="flex justify-end gap-3 pt-4">
-        <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>Cancelar</Button>
-        <Button type="submit" variant="primary" disabled={isSaving}>
+        <SecondaryButton onClick={onClose} disabled={isSaving}>Cancelar</SecondaryButton>
+        <PrimaryButton type="submit" disabled={isSaving}>
           {isSaving ? 'Salvando...' : 'Salvar Produto'}
-        </Button>
+        </PrimaryButton>
       </div>
     </form>
   );
 };
 
-// Restante do InventoryPage.jsx permanece igual, não necessita alteração.
-
-const InventoryPage = ({ filters }) => {
+const InventoryPage = () => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -105,12 +126,6 @@ const InventoryPage = ({ filters }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
-
-  useEffect(() => {
-    if (filters?.lowStockOnly) {
-      setShowLowStockOnly(true);
-    }
-  }, [filters]);
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -179,10 +194,9 @@ const InventoryPage = ({ filters }) => {
     <>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-base-400">Estoque</h1>
-        <Button variant="primary" onClick={handleAddProduct}>
-          <PlusIcon />
-          Adicionar Produto
-        </Button>
+        <PrimaryButton onClick={handleAddProduct}>
+          <PlusIcon /> Adicionar Produto
+        </PrimaryButton>
       </div>
 
       <Card className="mb-6">
@@ -216,12 +230,12 @@ const InventoryPage = ({ filters }) => {
             <table className="min-w-full divide-y divide-base-200">
               <thead className="bg-white">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">SKU</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">Nome</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">Custo</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">Preço</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">Quantidade</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">Ações</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">SKU</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Nome</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Custo</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Preço</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Quantidade</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Ações</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-base-200">
@@ -229,11 +243,11 @@ const InventoryPage = ({ filters }) => {
                   const isLowStock = product.quantity <= product.minStock;
                   return (
                     <tr key={product.id} className={isLowStock ? 'bg-warning/10' : ''}>
-                      <td className="px-6 py-4 text-sm font-mono text-base-300">{product.sku}</td>
+                      <td className="px-6 py-4 text-sm font-mono">{product.sku}</td>
                       <td className="px-6 py-4 text-sm font-medium text-base-400">{product.name}</td>
-                      <td className="px-6 py-4 text-sm text-base-300">{formatCurrency(product.cost)}</td>
-                      <td className="px-6 py-4 text-sm text-base-300">{formatCurrency(product.price)}</td>
-                      <td className="px-6 py-4 text-sm text-base-300">
+                      <td className="px-6 py-4 text-sm">{formatCurrency(product.cost)}</td>
+                      <td className="px-6 py-4 text-sm">{formatCurrency(product.price)}</td>
+                      <td className="px-6 py-4 text-sm">
                         <div className="flex items-center gap-2">
                           {isLowStock && <AlertTriangleIcon className="w-5 h-5 text-warning" title={`Estoque baixo (mínimo: ${product.minStock})`} />}
                           <span className={isLowStock ? 'text-danger font-bold' : ''}>{product.quantity}</span>
@@ -249,7 +263,7 @@ const InventoryPage = ({ filters }) => {
                   );
                 }) : (
                   <tr>
-                    <td colSpan={6} className="text-center py-12 text-base-300">Nenhum produto encontrado.</td>
+                    <td colSpan={6} className="text-center py-12">Nenhum produto encontrado.</td>
                   </tr>
                 )}
               </tbody>

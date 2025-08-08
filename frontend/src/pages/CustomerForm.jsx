@@ -1,6 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { Input, Button } from '../components/common';
+import { Input } from '../components/common';
 import InputMask from 'react-input-mask';
+
+// Botões personalizados com cor dinâmica
+const PrimaryButton = ({ children, onClick, type = 'button', className = '', ...props }) => (
+  <button
+    type={type}
+    onClick={onClick}
+    className={`px-4 py-2 rounded text-white flex items-center justify-center gap-2 ${className}`}
+    style={{ backgroundColor: 'rgb(var(--color-primary-600))' }}
+    {...props}
+  >
+    {children}
+  </button>
+);
+
+const SecondaryButton = ({ children, onClick, type = 'button', className = '', ...props }) => (
+  <button
+    type={type}
+    onClick={onClick}
+    className={`px-4 py-2 rounded text-white bg-base-400 hover:brightness-110 flex items-center justify-center gap-2 ${className}`}
+    {...props}
+  >
+    {children}
+  </button>
+);
 
 const CustomerForm = ({ customer, onSave, onClose, isSaving }) => {
   const [formData, setFormData] = useState({
@@ -42,7 +66,6 @@ const CustomerForm = ({ customer, onSave, onClose, isSaving }) => {
         ...formData,
         cpfCnpj: formData.cpfCnpj.replace(/\D/g, ''),
       };
-      console.log('✅ Salvando cliente:', sanitizedData);
       onSave(sanitizedData);
     }
   };
@@ -108,12 +131,12 @@ const CustomerForm = ({ customer, onSave, onClose, isSaving }) => {
       {errors.address && <p className="text-danger text-sm">{errors.address}</p>}
 
       <div className="flex justify-end gap-3 pt-4">
-        <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>
+        <SecondaryButton onClick={onClose} disabled={isSaving}>
           Cancelar
-        </Button>
-        <Button type="button" variant="primary" onClick={handleClickSave} disabled={isSaving}>
-          <span>{isSaving ? 'Salvando...' : 'Salvar Cliente'}</span>
-        </Button>
+        </SecondaryButton>
+        <PrimaryButton onClick={handleClickSave} disabled={isSaving}>
+          {isSaving ? 'Salvando...' : 'Salvar Cliente'}
+        </PrimaryButton>
       </div>
     </div>
   );

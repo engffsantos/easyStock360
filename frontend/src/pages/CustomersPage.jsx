@@ -1,23 +1,39 @@
 // frontend/src/pages/CustomersPage.jsx
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { api } from '../api/api';
-import { Card, Button, Input, ModalWrapper, Spinner } from '../components/common';
+import { Card, Input, ModalWrapper, Spinner } from '../components/common';
 import { PlusIcon, EditIcon, TrashIcon, SearchIcon, MessageSquareIcon } from '../components/icons';
 import InputMask from 'react-input-mask';
+
+// Botões temáticos
+const PrimaryButton = ({ children, onClick, type = 'button', className = '', ...props }) => (
+  <button
+    type={type}
+    onClick={onClick}
+    className={`px-4 py-2 rounded text-white flex items-center gap-2 ${className}`}
+    style={{ backgroundColor: 'rgb(var(--color-primary-600))' }}
+    {...props}
+  >
+    {children}
+  </button>
+);
+
+const SecondaryButton = ({ children, onClick, type = 'button', className = '', ...props }) => (
+  <button
+    type={type}
+    onClick={onClick}
+    className={`px-4 py-2 rounded text-white bg-base-400 hover:brightness-110 flex items-center gap-2 ${className}`}
+    {...props}
+  >
+    {children}
+  </button>
+);
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
-const formatDate = (dateString) =>
-  new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(dateString));
-
 const CustomerForm = ({ customer, onSave, onClose, isSaving }) => {
-  const [formData, setFormData] = useState({
-    name: '',
-    cpfCnpj: '',
-    phone: '',
-    address: '',
-  });
+  const [formData, setFormData] = useState({ name: '', cpfCnpj: '', phone: '', address: '' });
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
@@ -62,20 +78,11 @@ const CustomerForm = ({ customer, onSave, onClose, isSaving }) => {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <Input
-        id="name"
-        name="name"
-        label="Nome Completo / Razão Social"
-        value={formData.name}
-        onChange={handleChange}
-        required
-      />
+      <Input id="name" name="name" label="Nome Completo / Razão Social" value={formData.name} onChange={handleChange} required />
       {errors.name && <p className="text-danger text-sm">{errors.name}</p>}
 
       <div className="space-y-1">
-        <label htmlFor="cpfCnpj" className="block text-sm font-medium text-gray-700">
-          CPF / CNPJ
-        </label>
+        <label htmlFor="cpfCnpj" className="block text-sm font-medium text-gray-700">CPF / CNPJ</label>
         <InputMask
           mask={formData.cpfCnpj.replace(/\D/g, '').length > 11 ? '99.999.999/9999-99' : '999.999.999-99'}
           value={formData.cpfCnpj}
@@ -94,34 +101,17 @@ const CustomerForm = ({ customer, onSave, onClose, isSaving }) => {
         {errors.cpfCnpj && <p className="text-danger text-sm">{errors.cpfCnpj}</p>}
       </div>
 
-      <Input
-        id="phone"
-        name="phone"
-        label="Telefone"
-        type="tel"
-        value={formData.phone}
-        onChange={handleChange}
-        required
-      />
+      <Input id="phone" name="phone" label="Telefone" type="tel" value={formData.phone} onChange={handleChange} required />
       {errors.phone && <p className="text-danger text-sm">{errors.phone}</p>}
 
-      <Input
-        id="address"
-        name="address"
-        label="Endereço Completo"
-        value={formData.address}
-        onChange={handleChange}
-        required
-      />
+      <Input id="address" name="address" label="Endereço Completo" value={formData.address} onChange={handleChange} required />
       {errors.address && <p className="text-danger text-sm">{errors.address}</p>}
 
       <div className="flex justify-end gap-3 pt-4">
-        <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>
-          Cancelar
-        </Button>
-        <Button type="submit" variant="primary" disabled={isSaving}>
-          <span>{isSaving ? 'Salvando...' : 'Salvar Cliente'}</span>
-        </Button>
+        <SecondaryButton onClick={onClose} disabled={isSaving}>Cancelar</SecondaryButton>
+        <PrimaryButton type="submit" disabled={isSaving}>
+          {isSaving ? 'Salvando...' : 'Salvar Cliente'}
+        </PrimaryButton>
       </div>
     </form>
   );
@@ -223,12 +213,10 @@ const CustomersPage = () => {
     <>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-base-400">Clientes</h1>
-        <Button variant="primary" onClick={handleAddCustomer}>
-          <span className="inline-flex items-center gap-2">
-            <PlusIcon />
-            Adicionar Cliente
-          </span>
-        </Button>
+        <PrimaryButton onClick={handleAddCustomer}>
+          <PlusIcon />
+          Adicionar Cliente
+        </PrimaryButton>
       </div>
 
       <Card className="mb-6">
@@ -255,37 +243,35 @@ const CustomersPage = () => {
             <table className="min-w-full divide-y divide-base-200">
               <thead className="bg-white">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">Nome</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">CPF / CNPJ</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">Telefone</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">Ações</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase">Nome</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase">CPF / CNPJ</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase">Telefone</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase">Ações</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-base-200">
-                {filteredCustomers.length > 0 ? (
-                  filteredCustomers.map((customer) => (
-                    <tr key={customer.id}>
-                      <td className="px-6 py-4 text-sm font-medium text-base-400">{customer.name}</td>
-                      <td className="px-6 py-4 text-sm text-base-300">{customer.cpfCnpj}</td>
-                      <td className="px-6 py-4 text-sm text-base-300">{customer.phone}</td>
-                      <td className="px-6 py-4 text-sm font-medium">
-                        <div className="flex gap-2">
-                          <button onClick={() => handleEditCustomer(customer)} className="text-primary-700 hover:text-primary-800" title="Editar">
-                            <EditIcon />
-                          </button>
-                          <button onClick={() => handleDeleteCustomer(customer.id)} className="text-danger hover:brightness-90" title="Remover">
-                            <TrashIcon />
-                          </button>
-                          <button onClick={() => handleViewInteractions(customer.id)} className="text-blue-600 hover:underline" title="Ver Interações">
-                            <MessageSquareIcon />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
+                {filteredCustomers.length > 0 ? filteredCustomers.map((customer) => (
+                  <tr key={customer.id}>
+                    <td className="px-6 py-4 text-sm font-medium text-base-400">{customer.name}</td>
+                    <td className="px-6 py-4 text-sm">{customer.cpfCnpj}</td>
+                    <td className="px-6 py-4 text-sm">{customer.phone}</td>
+                    <td className="px-6 py-4 text-sm font-medium">
+                      <div className="flex gap-2">
+                        <button onClick={() => handleEditCustomer(customer)} className="hover:text-primary-800" title="Editar">
+                          <EditIcon />
+                        </button>
+                        <button onClick={() => handleDeleteCustomer(customer.id)} className="text-danger hover:brightness-90" title="Remover">
+                          <TrashIcon />
+                        </button>
+                        <button onClick={() => handleViewInteractions(customer.id)} className="text-blue-600 hover:underline" title="Ver Interações">
+                          <MessageSquareIcon />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )) : (
                   <tr>
-                    <td colSpan={4} className="text-center py-12 text-base-300">Nenhum cliente encontrado.</td>
+                    <td colSpan={4} className="text-center py-12">Nenhum cliente encontrado.</td>
                   </tr>
                 )}
               </tbody>
@@ -294,24 +280,11 @@ const CustomersPage = () => {
         )}
       </Card>
 
-      <ModalWrapper
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title={editingCustomer ? 'Editar Cliente' : 'Adicionar Novo Cliente'}
-      >
-        <CustomerForm
-          customer={editingCustomer}
-          onSave={handleSaveCustomer}
-          onClose={() => setIsModalOpen(false)}
-          isSaving={isSaving}
-        />
+      <ModalWrapper isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingCustomer ? 'Editar Cliente' : 'Adicionar Novo Cliente'}>
+        <CustomerForm customer={editingCustomer} onSave={handleSaveCustomer} onClose={() => setIsModalOpen(false)} isSaving={isSaving} />
       </ModalWrapper>
 
-      <ModalWrapper
-        isOpen={showInteractionModal}
-        onClose={() => setShowInteractionModal(false)}
-        title={`Interações de ${activeCustomerName}`}
-      >
+      <ModalWrapper isOpen={showInteractionModal} onClose={() => setShowInteractionModal(false)} title={`Interações de ${activeCustomerName}`}>
         {interactions.length > 0 ? (
           <ul className="space-y-2">
             {interactions.map((i, index) => (
@@ -323,7 +296,7 @@ const CustomersPage = () => {
             ))}
           </ul>
         ) : (
-          <p className="text-base-300">Nenhuma interação encontrada.</p>
+          <p className="">Nenhuma interação encontrada.</p>
         )}
       </ModalWrapper>
     </>

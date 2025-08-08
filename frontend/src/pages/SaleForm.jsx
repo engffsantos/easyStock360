@@ -1,7 +1,7 @@
-// frontend/src/pages/SaleForm.jsx
+//frontend/src/pages/SaleForm.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../api/api';
-import { Card, Button, Input, Spinner, ModalWrapper } from '../components/common';
+import { Card, Input, Spinner, ModalWrapper } from '../components/common';
 import { TrashIcon, PlusIcon } from '../components/icons';
 import Select from 'react-select';
 import CustomerForm from './CustomerForm';
@@ -16,6 +16,28 @@ const PAYMENT_METHODS = {
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+
+const PrimaryButton = ({ children, type = 'button', onClick, className = '', ...props }) => (
+  <button
+    type={type}
+    onClick={onClick}
+    className={`px-4 py-2 rounded text-white ${className}`}
+    style={{ backgroundColor: 'rgb(var(--color-primary-600))' }}
+    {...props}
+  >
+    {children}
+  </button>
+);
+
+const SecondaryButton = ({ children, onClick, className = '' }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={`px-4 py-2 rounded text-white bg-base-400 hover:brightness-110 ${className}`}
+  >
+    {children}
+  </button>
+);
 
 const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
   const [products, setProducts] = useState([]);
@@ -36,19 +58,17 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
   const handleCreateCustomer = async (customerData) => {
     setIsCreatingCustomer(true);
     try {
-      const { data: saved } = await api.addCustomer(customerData); // ✅ Corrigido aqui
+      const { data: saved } = await api.addCustomer(customerData);
       const updatedCustomers = await api.getCustomers();
       setCustomers(updatedCustomers);
 
-      // Aguarda lista ser atualizada antes de setar cliente
       setTimeout(() => {
         setSelectedCustomerId(saved.id);
       }, 100);
 
       setIsCustomerModalOpen(false);
     } catch (e) {
-      console.error('Erro ao cadastrar cliente:', e);
-      alert(e.response?.data?.error || 'Erro ao cadastrar cliente.');
+      alert('Erro ao cadastrar cliente.');
       setIsCustomerModalOpen(true);
     } finally {
       setIsCreatingCustomer(false);
@@ -65,7 +85,7 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
         ]);
         setProducts(productsData);
         setCustomers(customersData);
-      } catch (e) {
+      } catch {
         alert('Erro ao carregar produtos e clientes');
       } finally {
         setLoading(false);
@@ -143,8 +163,7 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
         await api.addTransaction(payload);
       }
       onSave();
-    } catch (e) {
-      console.error('Erro ao salvar transação:', e);
+    } catch {
       alert('Erro ao salvar transação');
     }
   };
@@ -155,7 +174,7 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
     <form onSubmit={handleSubmit} className="space-y-6">
       <Card className="!p-4">
         <div className="mb-4">
-          <label className="block mb-1 text-sm text-base-300">Tipo de operação</label>
+          <label className="block mb-1 text-sm ">Tipo de operação</label>
           <div className="flex gap-4">
             <label className="flex items-center gap-2">
               <input type="radio" value="QUOTE" checked={formType === 'QUOTE'} onChange={() => setFormType('QUOTE')} />
@@ -169,7 +188,7 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
         </div>
 
         <div>
-          <label className="block mb-1 text-sm text-base-300">Cliente</label>
+          <label className="block mb-1 text-sm ">Cliente</label>
           <div className="flex gap-2 items-center">
             <Select
               options={customerOptions}
@@ -180,11 +199,11 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
               filterOption={(option, input) => option.data.tokens.includes(input.toLowerCase())}
               className="w-full"
             />
-            <Button variant="primary" onClick={() => setIsCustomerModalOpen(true)}>
+            <PrimaryButton onClick={() => setIsCustomerModalOpen(true)}>
               <span className="inline-flex items-center gap-2">
                 <PlusIcon /> Novo Cliente
               </span>
-            </Button>
+            </PrimaryButton>
           </div>
         </div>
 
@@ -204,7 +223,7 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
         {formType === 'COMPLETED' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
             <div>
-              <label className="block mb-1 text-sm text-base-300">Forma de pagamento</label>
+              <label className="block mb-1 text-sm ">Forma de pagamento</label>
               <select
                 value={paymentDetails.paymentMethod}
                 onChange={e => setPaymentDetails(p => ({ ...p, paymentMethod: e.target.value, installments: 1 }))}
@@ -216,7 +235,7 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
               </select>
             </div>
             <div>
-              <label className="block mb-1 text-sm text-base-300">Parcelas</label>
+              <label className="block mb-1 text-sm ">Parcelas</label>
               <Input
                 type="number"
                 min="1"
@@ -249,7 +268,7 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
             value={currentItem.quantity}
             onChange={e => setCurrentItem(prev => ({ ...prev, quantity: parseInt(e.target.value) || 1 }))}
           />
-          <Button type="button" onClick={handleAddItem}>Adicionar</Button>
+          <PrimaryButton onClick={handleAddItem}>Adicionar</PrimaryButton>
         </div>
         {itemError && <p className="text-danger mt-2">{itemError}</p>}
       </Card>
@@ -280,7 +299,7 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
             ))}
             {saleItems.length === 0 && (
               <tr>
-                <td colSpan="4" className="text-center text-base-300 py-4">Nenhum item adicionado.</td>
+                <td colSpan="4" className="text-center py-4">Nenhum item adicionado.</td>
               </tr>
             )}
           </tbody>
@@ -296,10 +315,10 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
       </Card>
 
       <div className="flex justify-end gap-3">
-        <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-        <Button type="submit" variant="primary" disabled={saleItems.length === 0 || isSaving}>
+        <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
+        <PrimaryButton type="submit" disabled={saleItems.length === 0 || isSaving}>
           {isSaving ? 'Salvando...' : transactionToEdit ? 'Salvar Alterações' : formType === 'QUOTE' ? 'Salvar Orçamento' : 'Registrar Venda'}
-        </Button>
+        </PrimaryButton>
       </div>
     </form>
   );

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../api/api';
 import SaleForm from './SaleForm';
-import { Card, Button, Spinner, ModalWrapper } from '../components/common';
+import { Card, Spinner, ModalWrapper } from '../components/common';
 import { PlusIcon, TrashIcon, CheckCircleIcon, EditIcon } from '../components/icons';
 
 const formatCurrency = (value) =>
@@ -108,8 +108,8 @@ const SalesPage = ({ onNavigateToReceipt }) => {
       onClick={onClick}
       className={`px-4 py-2 text-lg font-semibold border-b-4 transition-colors duration-200 ${
         isActive
-          ? 'border-primary-700 text-primary-700'
-          : 'border-transparent text-base-300 hover:border-primary-200 hover:text-primary-700'
+          ? 'border-primary-700'
+          : 'border-transparent  hover:border-primary-200'
       }`}
     >
       {label}
@@ -119,16 +119,37 @@ const SalesPage = ({ onNavigateToReceipt }) => {
     </button>
   );
 
+  const PrimaryButton = ({ children, onClick, disabled, className = '', ...props }) => (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`px-4 py-2 rounded text-white ${className}`}
+      style={{ backgroundColor: 'rgb(var(--color-primary-600))' }}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+
+  const DangerButton = ({ children, onClick, className = '' }) => (
+    <button
+      onClick={onClick}
+      className={`px-4 py-2 rounded text-white bg-red-600 hover:bg-red-700 ${className}`}
+    >
+      {children}
+    </button>
+  );
+
   const renderSalesTable = () => (
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-base-200">
         <thead className="bg-white">
           <tr>
-            <th className="px-6 py-3 text-left text-xs text-base-300 uppercase">Data</th>
-            <th className="px-6 py-3 text-left text-xs text-base-300 uppercase">Cliente</th>
-            <th className="px-6 py-3 text-left text-xs text-base-300 uppercase">Itens</th>
-            <th className="px-6 py-3 text-left text-xs text-base-300 uppercase">Total</th>
-            <th className="px-6 py-3 text-left text-xs text-base-300 uppercase">Ações</th>
+            <th className="px-6 py-3 text-left text-xs  uppercase">Data</th>
+            <th className="px-6 py-3 text-left text-xs  uppercase">Cliente</th>
+            <th className="px-6 py-3 text-left text-xs  uppercase">Itens</th>
+            <th className="px-6 py-3 text-left text-xs  uppercase">Total</th>
+            <th className="px-6 py-3 text-left text-xs  uppercase">Ações</th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-base-200">
@@ -138,38 +159,25 @@ const SalesPage = ({ onNavigateToReceipt }) => {
                 key={sale.id}
                 className={sale.status === 'CANCELLED' ? 'opacity-50 line-through' : ''}
               >
-                <td className="px-6 py-4 text-sm text-base-300">{formatDate(sale.createdAt)}</td>
+                <td className="px-6 py-4 text-sm ">{formatDate(sale.createdAt)}</td>
                 <td className="px-6 py-4 text-sm text-base-400">{sale.customerName || 'Consumidor Final'}</td>
-                <td className="px-6 py-4 text-sm text-base-300">{(sale.items || []).length}</td>
+                <td className="px-6 py-4 text-sm ">{(sale.items || []).length}</td>
                 <td className="px-6 py-4 text-sm font-bold text-primary-800">{formatCurrency(sale.total)}</td>
                 <td className="px-6 py-4 flex flex-wrap gap-2">
-                  <Button
-                    variant="secondary"
-                    className="!py-1 !px-2"
-                    onClick={() => {
-                      if (typeof onNavigateToReceipt === 'function') {
-                        onNavigateToReceipt(sale.id);
-                      }
-                    }}
-                    aria-label={`Ver recibo da venda de ${sale.customerName || 'cliente'}`}
-                  >
+                  <PrimaryButton className="!py-1 !px-2" onClick={() => onNavigateToReceipt(sale.id)}>
                     Ver Recibo
-                  </Button>
+                  </PrimaryButton>
                   {sale.status !== 'CANCELLED' && (
-                    <Button
-                      variant="danger"
-                      className="!py-1 !px-2"
-                      onClick={() => handleCancelSale(sale.id)}
-                    >
+                    <DangerButton className="!py-1 !px-2" onClick={() => handleCancelSale(sale.id)}>
                       Cancelar
-                    </Button>
+                    </DangerButton>
                   )}
                 </td>
               </tr>
             ))
           ) : (
             <tr>
-              <td colSpan="5" className="text-center py-12 text-base-300">
+              <td colSpan="5" className="text-center py-12">
                 Nenhuma venda registrada.
               </td>
             </tr>
@@ -184,28 +192,28 @@ const SalesPage = ({ onNavigateToReceipt }) => {
       <table className="min-w-full divide-y divide-base-200">
         <thead className="bg-white">
           <tr>
-            <th className="px-6 py-3 text-left text-xs text-base-300 uppercase">Data</th>
-            <th className="px-6 py-3 text-left text-xs text-base-300 uppercase">Cliente</th>
-            <th className="px-6 py-3 text-left text-xs text-base-300 uppercase">Total</th>
-            <th className="px-6 py-3 text-left text-xs text-base-300 uppercase">Ações</th>
+            <th className="px-6 py-3 text-left text-xs uppercase">Data</th>
+            <th className="px-6 py-3 text-left text-xsuppercase">Cliente</th>
+            <th className="px-6 py-3 text-left text-xs uppercase">Total</th>
+            <th className="px-6 py-3 text-left text-xs uppercase">Ações</th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-base-200">
           {quotes.length > 0 ? (
             quotes.map(quote => (
               <tr key={quote.id}>
-                <td className="px-6 py-4 text-sm text-base-300">{formatDate(quote.createdAt)}</td>
+                <td className="px-6 py-4 text-sm ">{formatDate(quote.createdAt)}</td>
                 <td className="px-6 py-4 text-sm text-base-400">{quote.customerName || 'Consumidor Final'}</td>
                 <td className="px-6 py-4 text-sm font-bold text-primary-800">{formatCurrency(quote.total)}</td>
                 <td className="px-6 py-4">
                   <div className="flex gap-2 items-center flex-wrap">
-                    <Button onClick={() => setQuoteToConvert(quote)} className="!py-1 !px-2 text-sm bg-secondary-600 text-white">
+                    <PrimaryButton className="!py-1 !px-2 text-sm" onClick={() => setQuoteToConvert(quote)}>
                       <CheckCircleIcon className="w-4 h-4" /> Converter
-                    </Button>
-                    <Button variant="secondary" className="!py-1 !px-2" onClick={() => onNavigateToReceipt(quote.id)}>
+                    </PrimaryButton>
+                    <PrimaryButton className="!py-1 !px-2" onClick={() => onNavigateToReceipt(quote.id)}>
                       Ver Orçamento
-                    </Button>
-                    <button onClick={() => handleEditQuote(quote)} className="text-primary-700 hover:text-primary-800 p-1 rounded" title="Editar Orçamento">
+                    </PrimaryButton>
+                    <button onClick={() => handleEditQuote(quote)} className=" hover:text-primary-800 p-1 rounded" title="Editar Orçamento">
                       <EditIcon />
                     </button>
                     <button onClick={() => handleDeleteQuote(quote.id)} className="text-danger hover:brightness-90 p-1 rounded" title="Excluir Orçamento">
@@ -216,7 +224,7 @@ const SalesPage = ({ onNavigateToReceipt }) => {
               </tr>
             ))
           ) : (
-            <tr><td colSpan="4" className="text-center py-12 text-base-300">Nenhum orçamento registrado.</td></tr>
+            <tr><td colSpan="4" className="text-center py-12 ">Nenhum orçamento registrado.</td></tr>
           )}
         </tbody>
       </table>
@@ -233,10 +241,10 @@ const SalesPage = ({ onNavigateToReceipt }) => {
     <>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-base-400">Vendas e Orçamentos</h1>
-        <Button variant="primary" onClick={handleOpenModal}>
+        <PrimaryButton onClick={handleOpenModal}>
           <PlusIcon />
           Nova Venda / Orçamento
-        </Button>
+        </PrimaryButton>
       </div>
 
       <div className="mb-6 border-b border-base-200">
@@ -271,7 +279,7 @@ const SalesPage = ({ onNavigateToReceipt }) => {
             <p>Confirme os detalhes de pagamento para converter este orçamento em uma venda.</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block mb-1 text-sm text-base-300">Forma de pagamento</label>
+                <label className="block mb-1 text-sm">Forma de pagamento</label>
                 <select
                   value={paymentDetails.paymentMethod}
                   onChange={(e) =>
@@ -292,7 +300,7 @@ const SalesPage = ({ onNavigateToReceipt }) => {
               </div>
 
               <div>
-                <label className="block mb-1 text-sm text-base-300">Parcelas</label>
+                <label className="block mb-1 text-sm">Parcelas</label>
                 <input
                   type="number"
                   min="1"
@@ -312,13 +320,9 @@ const SalesPage = ({ onNavigateToReceipt }) => {
               </div>
             </div>
 
-            <Button
-              variant="primary"
-              onClick={() => handleConvertToSale(quoteToConvert.id, paymentDetails)}
-              disabled={isConverting}
-            >
+            <PrimaryButton onClick={() => handleConvertToSale(quoteToConvert.id, paymentDetails)} disabled={isConverting}>
               {isConverting ? 'Convertendo...' : 'Confirmar Conversão'}
-            </Button>
+            </PrimaryButton>
           </div>
         </ModalWrapper>
       )}

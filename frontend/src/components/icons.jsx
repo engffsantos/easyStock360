@@ -50,7 +50,7 @@ export const ChartBarIcon = (props) => (
 );
 
 export const PlusIcon = (props) => (
-  <IconBase {...props} d="M12 4v16m8-8H4" />
+  <IconBase {...props} d="M12 4v16m8-8H4" style={{ display: 'inline-block' }}/>
 );
 
 export const TrashIcon = (props) => (

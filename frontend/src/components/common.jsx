@@ -24,7 +24,7 @@ export const Button = ({ children, variant = 'primary', className = '', ...props
 
 export const Input = ({ id, label, ...props }) => (
   <div className="flex flex-col gap-1">
-    {label && <label htmlFor={id} className="text-sm text-base-300">{label}</label>}
+    {label && <label htmlFor={id} className="text-sm ">{label}</label>}
     <input id={id} className="px-3 py-2 border border-base-200 rounded-xl text-sm focus:outline-primary-700" {...props} />
   </div>
 );
@@ -36,7 +36,7 @@ export const ModalWrapper = ({ isOpen, onClose, title, children }) => {
       <div className="bg-white rounded-xl w-full max-w-lg p-6 relative">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold text-base-400">{title}</h2>
-          <button onClick={onClose} className="text-base-300 hover:text-base-400 text-2xl font-bold leading-none">&times;</button>
+          <button onClick={onClose} className=" hover:text-base-400 text-2xl font-bold leading-none">&times;</button>
         </div>
         <div>{children}</div>
       </div>
@@ -62,7 +62,7 @@ export const ProgressBar = ({ value, max }) => {
 
 export const Select = ({ id, label, options = [], ...props }) => (
   <div className="flex flex-col gap-1">
-    {label && <label htmlFor={id} className="text-sm text-base-300">{label}</label>}
+    {label && <label htmlFor={id} className="text-sm ">{label}</label>}
     <select id={id} className="px-3 py-2 border border-base-200 rounded-xl text-sm focus:outline-primary-700" {...props}>
       {options.map((option) => (
         <option key={option.value} value={option.value}>{option.label}</option>

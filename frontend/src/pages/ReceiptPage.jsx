@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api/api';
 import * as mockApi from '../api/mock';
-import { Button, Spinner } from '../components/common';
+import { Spinner } from '../components/common';
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat('pt-BR', {
@@ -15,6 +15,25 @@ const formatDate = (dateString) =>
     dateStyle: 'short',
     timeStyle: 'short',
   }).format(new Date(dateString));
+
+const PrimaryButton = ({ children, onClick }) => (
+  <button
+    onClick={onClick}
+    className="px-4 py-2 rounded text-white"
+    style={{ backgroundColor: 'rgb(var(--color-primary-600))' }}
+  >
+    {children}
+  </button>
+);
+
+const SecondaryButton = ({ children, onClick }) => (
+  <button
+    onClick={onClick}
+    className="px-4 py-2 rounded text-white bg-base-400 hover:brightness-110"
+  >
+    {children}
+  </button>
+);
 
 const ReceiptPage = ({ transactionId, onBack }) => {
   const [transaction, setTransaction] = useState(null);
@@ -73,7 +92,7 @@ const ReceiptPage = ({ transactionId, onBack }) => {
       </p>
 
       {companyInfo && (
-        <div className="mb-4 text-sm text-base-300">
+        <div className="mb-4 text-sm">
           {companyInfo.logoBase64 && (
             <div className="mb-2">
               <img
@@ -91,7 +110,7 @@ const ReceiptPage = ({ transactionId, onBack }) => {
         </div>
       )}
 
-      <div className="mb-6 text-sm text-base-300">
+      <div className="mb-6 text-sm">
         <p>
           <strong className="text-base-400">Cliente:</strong>{' '}
           {transaction.customerName || 'Consumidor Final'}
@@ -147,11 +166,11 @@ const ReceiptPage = ({ transactionId, onBack }) => {
 
       <div className="mt-6 print:hidden flex justify-between">
         {onBack && (
-          <Button variant="secondary" onClick={onBack}>
+          <SecondaryButton onClick={onBack}>
             Voltar
-          </Button>
+          </SecondaryButton>
         )}
-        <Button
+        <PrimaryButton
           onClick={() => {
             setTimeout(() => {
               window.print();
@@ -159,7 +178,7 @@ const ReceiptPage = ({ transactionId, onBack }) => {
           }}
         >
           Imprimir {transaction.status === 'QUOTE' ? 'Orçamento' : 'Recibo'}
-        </Button>
+        </PrimaryButton>
       </div>
     </div>
   );

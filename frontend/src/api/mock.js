@@ -32,3 +32,21 @@ export const getTransactionById = async (id) => {
     ]
   };
 };
+
+// ✅ Adicionado para simular a API de configurações de tema
+let themeSettings = {
+  primaryColor: 'petroleo',
+  fontSize: 'base'
+};
+
+export const getThemeSettings = async () => {
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  return themeSettings;
+};
+
+export const saveThemeSettings = async (settings) => {
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  console.log("Configurações de tema salvas:", settings);
+  themeSettings = settings;
+  return { success: true };
+};

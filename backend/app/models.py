@@ -133,3 +133,35 @@ class ReportGoals(db.Model):
     monthly_revenue = db.Column(db.Float, nullable=False, default=0.0)
     monthly_profit = db.Column(db.Float, nullable=False, default=0.0)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+# -----------------------------
+# CompanySettings (novo modelo)
+# -----------------------------
+class CompanySettings(db.Model):
+    __tablename__ = 'company_settings'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    cnpj = db.Column(db.String(20), nullable=False)
+    address = db.Column(db.String(200), nullable=False)
+    phone = db.Column(db.String(20), nullable=False)
+    email = db.Column(db.String(100), nullable=False)
+
+    logo_base64 = db.Column(db.Text, nullable=True)
+    theme_color = db.Column(db.String(20), nullable=True)
+    font_size = db.Column(db.String(10), nullable=True)
+
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'cnpj': self.cnpj,
+            'address': self.address,
+            'phone': self.phone,
+            'email': self.email,
+            'logoBase64': self.logo_base64,
+            'themeColor': self.theme_color,
+            'fontSize': self.font_size,
+            'updatedAt': self.updated_at.isoformat() if self.updated_at else None
+        }

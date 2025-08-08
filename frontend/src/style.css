@@ -1,15 +1,97 @@
-/* Reset básico */
+/* ============================== */
+/* Variáveis dinâmicas do sistema */
+/* ============================== */
+
+:root {
+  /* Cores de feedback */
+  --color-success: #38A169;
+  --color-warning: #ED8936;
+  --color-danger: #E53E3E;
+
+  /* Cores base para textos e fundos */
+  --color-base-50: #f7fafc;
+  --color-base-100: #edf2f7;
+  --color-base-200: #e2e8f0;
+  --color-base-300: #cbd5e0;
+  --color-base-400: #a0aec0;
+  --color-base-500: #718096;
+  --color-base-600: #4a5568;
+  --color-base-700: #2d3748;
+  --color-base-800: #1a202c;
+  --color-base-900: #171923;
+
+  /* Tema padrão (Petroleo) */
+  --color-primary-50: 224, 247, 247;
+  --color-primary-100: 185, 233, 233;
+  --color-primary-200: 144, 220, 220;
+  --color-primary-300: 102, 207, 207;
+  --color-primary-400: 61, 186, 186;
+  --color-primary-500: 44, 122, 123;
+  --color-primary-600: 25, 106, 106;
+  --color-primary-700: 30, 90, 90;
+  --color-primary-800: 23, 74, 74;
+  --color-primary-900: 16, 58, 58;
+  --color-primary-950: 10, 39, 39;
+
+  --main-color: rgb(var(--color-primary-600));
+}
+
+/* ============================== */
+/* Temas alternativos de cor */
+/* ============================== */
+
+.theme-laranja {
+  --color-primary-50: 254, 246, 242;
+  --color-primary-100: 252, 232, 221;
+  --color-primary-200: 248, 209, 187;
+  --color-primary-300: 243, 185, 152;
+  --color-primary-400: 237, 162, 118;
+  --color-primary-500: 231, 139, 84;
+  --color-primary-600: 192, 86, 33;
+  --color-primary-700: 164, 71, 27;
+  --color-primary-800: 136, 58, 26;
+  --color-primary-900: 111, 48, 25;
+  --color-primary-950: 64, 24, 12;
+}
+
+.theme-roxo {
+  --color-primary-50: 241, 242, 252;
+  --color-primary-100: 227, 229, 250;
+  --color-primary-200: 200, 204, 245;
+  --color-primary-300: 171, 178, 240;
+  --color-primary-400: 142, 153, 234;
+  --color-primary-500: 113, 127, 229;
+  --color-primary-600: 90, 103, 216;
+  --color-primary-700: 78, 88, 185;
+  --color-primary-800: 66, 74, 154;
+  --color-primary-900: 55, 61, 124;
+  --color-primary-950: 35, 38, 75;
+}
+
+/* ============================== */
+/* Tamanhos de Fonte Utilitários */
+/* ============================== */
+
+.font-size-sm { font-size: 0.8rem; }
+.font-size-base { font-size: 1rem; }
+.font-size-lg { font-size: 1.2rem; }
+
+/* ============================== */
+/* Reset e Estilos Base */
+/* ============================== */
+
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  font-family: 'Segoe UI', sans-serif;
 }
 
-/* Layout geral */
-body {
-  background-color: #f5f5f5;
-  color: #333;
+html, body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--color-base-100);
+  color: var(--color-base-700);
   line-height: 1.6;
 }
 
@@ -20,40 +102,42 @@ body {
   padding: 20px;
 }
 
-/* Títulos */
 h1, h2, h3 {
-  color: #222;
+  color: var(--color-base-900);
   margin-bottom: 12px;
 }
 
-/* Aplicação da fonte Oxanium para o nome da aplicação */
+/* Nome da aplicação com fonte especial */
 .logo {
   font-family: 'Oxanium', cursive;
   font-weight: 700;
 }
 
-/* Botões */
+/* ============================== */
+/* Botões, Inputs e Formulários */
+/* ============================== */
+
 button {
   padding: 10px 16px;
   border: none;
   border-radius: 6px;
-  background-color: #0066cc;
+  background-color: var(--main-color);
   color: white;
   cursor: pointer;
   transition: background-color 0.2s ease-in-out;
 }
 
 button:hover {
-  background-color: #004999;
+  filter: brightness(0.9);
 }
 
-/* Inputs e formulários */
 input, select, textarea {
   width: 100%;
   padding: 10px;
   margin-bottom: 12px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--color-base-300);
   border-radius: 6px;
+  font-size: 1rem;
 }
 
 label {
@@ -62,7 +146,10 @@ label {
   font-weight: bold;
 }
 
-/* Tabelas */
+/* ============================== */
+/* Tabelas e Cards */
+/* ============================== */
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -71,20 +158,19 @@ table {
 }
 
 th, td {
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-base-200);
   padding: 12px;
   text-align: left;
 }
 
 th {
-  background-color: #f0f0f0;
+  background-color: var(--color-base-50);
 }
 
 tr:nth-child(even) {
   background-color: #fafafa;
 }
 
-/* Cards */
 .card {
   background: white;
   border-radius: 8px;
@@ -93,7 +179,10 @@ tr:nth-child(even) {
   margin-bottom: 20px;
 }
 
-/* Modal básico */
+/* ============================== */
+/* Modal e Navbar */
+/* ============================== */
+
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -114,15 +203,17 @@ tr:nth-child(even) {
   max-width: 500px;
 }
 
-/* Barra de navegação simples */
 .navbar {
-  background-color: #0066cc;
+  background-color: var(--main-color);
   color: white;
   padding: 16px;
   font-size: 1.2rem;
 }
 
+/* ============================== */
 /* Responsividade */
+/* ============================== */
+
 @media (max-width: 768px) {
   .container {
     padding: 12px;
@@ -143,6 +234,11 @@ tr:nth-child(even) {
     white-space: nowrap;
   }
 }
+
+/* ============================== */
+/* Impressão de Recibo */
+/* ============================== */
+
 @media print {
   body * {
     visibility: hidden !important;
@@ -168,39 +264,27 @@ tr:nth-child(even) {
     box-shadow: none !important;
   }
 
-  /* --- Forçar estrutura correta de tabela --- */
-  .receipt-content table {
+  .receipt-content table,
+  .receipt-content thead,
+  .receipt-content tbody,
+  .receipt-content th,
+  .receipt-content td,
+  .receipt-content tr {
     display: table !important;
-    width: 100% !important;
+  }
+
+  .receipt-content table {
     table-layout: fixed !important;
     border-collapse: collapse !important;
   }
 
-  .receipt-content thead {
-    display: table-header-group !important;
-  }
-
-  .receipt-content tbody {
-    display: table-row-group !important;
-  }
-
-  .receipt-content tfoot {
-    display: table-footer-group !important;
-  }
-
-  .receipt-content tr {
-    display: table-row !important;
-  }
-
   .receipt-content th,
   .receipt-content td {
-    display: table-cell !important;
     vertical-align: middle !important;
     border: 1px solid black !important;
     padding: 6px !important;
   }
 
-  /* Larguras e alinhamentos */
   .receipt-content th:nth-child(1),
   .receipt-content td:nth-child(1) {
     width: 40%;
@@ -239,5 +323,3 @@ tr:nth-child(even) {
     overflow: visible !important;
   }
 }
-
-
