@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Input, Spinner } from '../components/common';
-import * as mockApi from '../api/mock';
+import { api } from '../api/api';
 import { SaveIcon } from '../components/icons';
 
 const SettingsPage = () => {
   const [companyInfo, setCompanyInfo] = useState(null);
-  const [themeSettings, setThemeSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -15,12 +14,9 @@ const SettingsPage = () => {
       try {
         setLoading(true);
         setError(null);
-        const [infoData, themeData] = await Promise.all([
-          mockApi.getCompanyInfo(),
-          mockApi.getThemeSettings(),
-        ]);
+        const infoData = await api.getCompanyInfo();
         setCompanyInfo(infoData);
-        setThemeSettings(themeData);
+        applyTheme(infoData);
       } catch (e) {
         setError('Falha ao carregar as configurações.');
         console.error(e);
@@ -34,17 +30,17 @@ const SettingsPage = () => {
   const applyTheme = (settings) => {
     const root = document.documentElement;
     root.classList.remove('theme-petroleo', 'theme-roxo', 'theme-laranja');
-    root.classList.add(`theme-${settings.primaryColor}`);
+    root.classList.add(`theme-${settings.themeColor}`);
 
     root.classList.remove('font-size-sm', 'font-size-base', 'font-size-lg');
-    root.classList.add(`font-size-${settings.fontSize}`);
+    const fontMap = { '1': 'sm', '2': 'base', '3': 'lg' };
+    root.classList.add(`font-size-${fontMap[settings.fontSize || '2']}`);
   };
 
   const handleThemeChange = (key, value) => {
-    if (!themeSettings) return;
-    const newSettings = { ...themeSettings, [key]: value };
-    setThemeSettings(newSettings);
-    applyTheme(newSettings);
+    const updated = { ...companyInfo, [key]: value };
+    setCompanyInfo(updated);
+    applyTheme(updated);
   };
 
   const handleInfoChange = (e) => {
@@ -70,13 +66,10 @@ const SettingsPage = () => {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!companyInfo || !themeSettings) return;
+    if (!companyInfo) return;
     setIsSaving(true);
     try {
-      await Promise.all([
-        mockApi.saveCompanyInfo(companyInfo),
-        mockApi.saveThemeSettings(themeSettings),
-      ]);
+      await api.saveCompanyInfo(companyInfo);
       alert('Configurações salvas com sucesso!');
     } catch (err) {
       alert('Falha ao salvar as configurações.');
@@ -88,18 +81,12 @@ const SettingsPage = () => {
 
   if (loading) return <div className="flex justify-center p-12"><Spinner /></div>;
   if (error) return <div className="text-center text-danger p-12">{error}</div>;
-  if (!companyInfo || !themeSettings) return <div className="text-center  p-12">Não foi possível carregar as configurações.</div>;
+  if (!companyInfo) return <div className="text-center  p-12">Não foi possível carregar as configurações.</div>;
 
   const colorOptions = [
     { key: 'petroleo', name: 'Petróleo', className: 'bg-[#2C7A7B]' },
     { key: 'laranja', name: 'Laranja', className: 'bg-[#C05621]' },
     { key: 'roxo', name: 'Roxo', className: 'bg-[#5A67D8]' },
-  ];
-
-  const fontOptions = [
-    { key: 'sm', name: 'Pequeno' },
-    { key: 'base', name: 'Médio' },
-    { key: 'lg', name: 'Grande' },
   ];
 
   return (
@@ -131,7 +118,7 @@ const SettingsPage = () => {
               </div>
             </div>
             <div className="space-y-4">
-              <label className="block text-sm font-medium ">Logo da Empresa</label>
+              <label className="block text-sm font-medium">Logo da Empresa</label>
               <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-base-200 border-dashed rounded-md">
                 <div className="space-y-1 text-center">
                   {companyInfo.logoBase64 ? (
@@ -141,13 +128,13 @@ const SettingsPage = () => {
                       <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   )}
-                  <div className="flex text-sm  justify-center">
+                  <div className="flex text-sm justify-center">
                     <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-primary-600 hover:text-primary-500">
                       <span>Carregar um arquivo</span>
                       <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={handleFileChange} accept="image/png, image/jpeg" />
                     </label>
                   </div>
-                  <p className="text-xs ">PNG, JPG até 1MB</p>
+                  <p className="text-xs">PNG, JPG até 1MB</p>
                 </div>
               </div>
               {companyInfo.logoBase64 && (
@@ -169,15 +156,15 @@ const SettingsPage = () => {
         <h2 className="text-xl font-bold text-base-400 mb-4">Aparência do Sistema</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div>
-            <h3 className="text-lg font-semibold  mb-3">Cor Principal</h3>
+            <h3 className="text-lg font-semibold mb-3">Cor Principal</h3>
             <div className="flex flex-wrap gap-4">
               {colorOptions.map(opt => (
                 <button
                   key={opt.key}
                   type="button"
-                  onClick={() => handleThemeChange('primaryColor', opt.key)}
+                  onClick={() => handleThemeChange('themeColor', opt.key)}
                   className={`p-2 rounded-lg border-2 text-white ${opt.className} ${
-                    themeSettings.primaryColor === opt.key ? 'ring-2 ring-offset-1 ring-primary-600' : 'border-transparent'
+                    companyInfo.themeColor === opt.key ? 'ring-2 ring-offset-1 ring-primary-600' : 'border-transparent'
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -188,23 +175,22 @@ const SettingsPage = () => {
               ))}
             </div>
           </div>
+
           <div>
-            <h3 className="text-lg font-semibold  mb-3">Tamanho da Fonte</h3>
-            <div className="flex flex-wrap items-center gap-2" role="group">
-              {fontOptions.map(opt => (
-                <button
-                  key={opt.key}
-                  type="button"
-                  onClick={() => handleThemeChange('fontSize', opt.key)}
-                  className={`px-6 py-2 rounded text-white ${
-                    themeSettings.fontSize === opt.key
-                      ? 'bg-[rgb(var(--color-primary-600))]'
-                      : 'bg-[rgb(var(--color-primary-300))]'
-                  }`}
-                >
-                  {opt.name}
-                </button>
-              ))}
+            <h3 className="text-lg font-semibold mb-3">Tamanho da Fonte</h3>
+            <input
+              type="range"
+              min="1"
+              max="3"
+              step="1"
+              value={companyInfo.fontSize || '2'}
+              onChange={(e) => handleThemeChange('fontSize', e.target.value)}
+              className="w-full"
+            />
+            <div className="flex justify-between text-sm mt-1 text-gray-600">
+              <span>Pequeno</span>
+              <span>Médio</span>
+              <span>Grande</span>
             </div>
           </div>
         </div>

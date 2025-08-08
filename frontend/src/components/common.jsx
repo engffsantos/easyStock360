@@ -31,14 +31,23 @@ export const Input = ({ id, label, ...props }) => (
 
 export const ModalWrapper = ({ isOpen, onClose, title, children }) => {
   if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-      <div className="bg-white rounded-xl w-full max-w-lg p-6 relative">
-        <div className="flex justify-between items-center mb-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 px-4">
+      <div className="bg-white rounded-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6 relative shadow-lg">
+        <div className="flex justify-between items-center mb-4 sticky top-0 bg-white z-10">
           <h2 className="text-xl font-bold text-base-400">{title}</h2>
-          <button onClick={onClose} className=" hover:text-base-400 text-2xl font-bold leading-none">&times;</button>
+          <button
+            onClick={onClose}
+            className="text-2xl font-bold leading-none text-base-300 hover:text-base-400"
+            aria-label="Fechar"
+          >
+            &times;
+          </button>
         </div>
-        <div>{children}</div>
+        <div className="space-y-4">
+          {children}
+        </div>
       </div>
     </div>
   );

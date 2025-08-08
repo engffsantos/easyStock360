@@ -140,3 +140,11 @@ export const XCircleIcon = (props) => (
 export const DownloadIcon = (props) => (
   <IconBase {...props} d="M4 16v-4h4V8h8v4h4v4m-8-4v4m-8-4h16" />
 );
+
+export const MenuIcon = (props) => (
+  <IconBase {...props} d="M4 6h16M4 12h16M4 18h16" />
+);
+
+export const ChevronRightIcon = (props) => (
+  <IconBase {...props} d="M9 5l7 7-7 7" />
+);

@@ -270,62 +270,71 @@ const SalesPage = ({ onNavigateToReceipt }) => {
       </ModalWrapper>
 
       {quoteToConvert && (
-        <ModalWrapper
-          isOpen={true}
-          onClose={() => setQuoteToConvert(null)}
-          title="Converter Orçamento"
-        >
-          <div className="space-y-4">
-            <p>Confirme os detalhes de pagamento para converter este orçamento em uma venda.</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block mb-1 text-sm">Forma de pagamento</label>
-                <select
-                  value={paymentDetails.paymentMethod}
-                  onChange={(e) =>
-                    setPaymentDetails((prev) => ({
-                      ...prev,
-                      paymentMethod: e.target.value,
-                      installments: 1
-                    }))
-                  }
-                  className="w-full p-2 border rounded"
-                >
-                  <option value="PIX">PIX</option>
-                  <option value="DINHEIRO">Dinheiro</option>
-                  <option value="CARTAO_CREDITO">Cartão de Crédito</option>
-                  <option value="CARTAO_DEBITO">Cartão de Débito</option>
-                  <option value="BOLETO">Boleto</option>
-                </select>
-              </div>
+  <ModalWrapper
+    isOpen={true}
+    onClose={() => setQuoteToConvert(null)}
+    title="Converter Orçamento"
+  >
+    <div className="w-full max-w-3xl md:max-w-4xl lg:max-w-5xl mx-auto">
+      {/* Container scrollável com limite de altura da viewport */}
+      <div className="space-y-4 max-h-[80vh] overflow-y-auto px-1">
+        <p>Confirme os detalhes de pagamento para converter este orçamento em uma venda.</p>
 
-              <div>
-                <label className="block mb-1 text-sm">Parcelas</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={paymentDetails.installments}
-                  onChange={(e) =>
-                    setPaymentDetails((prev) => ({
-                      ...prev,
-                      installments: parseInt(e.target.value) || 1
-                    }))
-                  }
-                  disabled={
-                    paymentDetails.paymentMethod !== 'CARTAO_CREDITO' &&
-                    paymentDetails.paymentMethod !== 'BOLETO'
-                  }
-                  className="w-full p-2 border rounded"
-                />
-              </div>
-            </div>
-
-            <PrimaryButton onClick={() => handleConvertToSale(quoteToConvert.id, paymentDetails)} disabled={isConverting}>
-              {isConverting ? 'Convertendo...' : 'Confirmar Conversão'}
-            </PrimaryButton>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block mb-1 text-sm">Forma de pagamento</label>
+            <select
+              value={paymentDetails.paymentMethod}
+              onChange={(e) =>
+                setPaymentDetails((prev) => ({
+                  ...prev,
+                  paymentMethod: e.target.value,
+                  installments: 1
+                }))
+              }
+              className="w-full p-2 border rounded"
+            >
+              <option value="PIX">PIX</option>
+              <option value="DINHEIRO">Dinheiro</option>
+              <option value="CARTAO_CREDITO">Cartão de Crédito</option>
+              <option value="CARTAO_DEBITO">Cartão de Débito</option>
+              <option value="BOLETO">Boleto</option>
+            </select>
           </div>
-        </ModalWrapper>
-      )}
+
+          <div>
+            <label className="block mb-1 text-sm">Parcelas</label>
+            <input
+              type="number"
+              min="1"
+              value={paymentDetails.installments}
+              onChange={(e) =>
+                setPaymentDetails((prev) => ({
+                  ...prev,
+                  installments: parseInt(e.target.value) || 1
+                }))
+              }
+              disabled={
+                paymentDetails.paymentMethod !== 'CARTAO_CREDITO' &&
+                paymentDetails.paymentMethod !== 'BOLETO'
+              }
+              className="w-full p-2 border rounded"
+            />
+          </div>
+        </div>
+
+        <PrimaryButton
+          onClick={() => handleConvertToSale(quoteToConvert.id, paymentDetails)}
+          disabled={isConverting}
+        >
+          {isConverting ? 'Convertendo...' : 'Confirmar Conversão'}
+        </PrimaryButton>
+      </div>
+    </div>
+  </ModalWrapper>
+)}
+
+
     </>
   );
 };

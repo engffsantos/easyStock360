@@ -68,5 +68,9 @@ export const api = {
         lowStockProductsCount: lowStock.length,
         recentSales: sales.slice(0, 5)
       };
-    })
+    }),
+    // Settings
+  getCompanyInfo: () => axios.get(`${BASE_URL}/settings/company`).then(res => res.data),
+  saveCompanyInfo: (data) => axios.post(`${BASE_URL}/settings/company`, data),
+  
 };

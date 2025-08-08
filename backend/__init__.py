@@ -8,6 +8,7 @@ from app.routes.customers import customers_bp
 from app.routes.sales import sales_bp
 from app.routes.financial import financial_bp
 from app.routes.reports import reports_bp
+from app.routes.settings import settings_bp
 import os
 
 def create_app():
@@ -33,6 +34,7 @@ def create_app():
     app.register_blueprint(sales_bp, url_prefix='/api/sales')
     app.register_blueprint(financial_bp, url_prefix='/api/financial')
     app.register_blueprint(reports_bp, url_prefix='/api/reports')
+    app.register_blueprint(settings_bp, url_prefix='/api/settings')
 
     # Cria as tabelas se não existirem
     with app.app_context():
