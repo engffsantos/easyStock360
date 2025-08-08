@@ -1,6 +1,6 @@
 // frontend/src/pages/InventoryPage.jsx
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { api } from '../api/api';
+import { api, importProductsFromCSV } from '../api/api';
 import { Card, Input, ModalWrapper, Spinner } from '../components/common';
 import { PlusIcon, EditIcon, TrashIcon, SearchIcon, AlertTriangleIcon } from '../components/icons';
 
@@ -194,15 +194,46 @@ const InventoryPage = () => {
     <>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-base-400">Estoque</h1>
-        <PrimaryButton onClick={handleAddProduct}>
-          <PlusIcon /> Adicionar Produto
-        </PrimaryButton>
+        <div className="flex gap-2 items-center">
+          <PrimaryButton onClick={handleAddProduct}>
+            <PlusIcon /> Adicionar Produto
+          </PrimaryButton>
+          <div className="relative">
+            <input
+              type="file"
+              accept=".csv"
+              className="absolute inset-0 opacity-0 cursor-pointer z-10"
+              onChange={async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                try {
+                  await importProductsFromCSV(file);
+                  await fetchProducts();
+                  alert('Importação concluída com sucesso!');
+                } catch (err) {
+                  alert(`Erro: ${err.message}`);
+                  console.error('[IMPORTAÇÃO FALHOU]', err);
+                  alert(`Erro ao importar CSV:\n${err.message}`);
+                }
+
+
+
+                e.target.value = '';
+              }}
+            />
+            <PrimaryButton type="button">
+              📥 Importar CSV
+            </PrimaryButton>
+          </div>
+        </div>
       </div>
 
       <Card className="mb-6">
         <div className="flex flex-col md:flex-row gap-4">
           <div className="relative flex-grow">
-            <Input id="search" label="Buscar por nome ou SKU" placeholder="Digite para buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
+            <Input id="search" label="Buscar por nome ou SKU" placeholder="Digite para buscar..." value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
             <div className="absolute inset-y-0 left-0 top-6 flex items-center pl-3 pointer-events-none">
               <SearchIcon className="text-base-200" />
             </div>

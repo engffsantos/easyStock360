@@ -87,3 +87,33 @@ export const api = {
   getCompanyInfo: () => axios.get(`${BASE_URL}/settings/company`).then(res => res.data),
   saveCompanyInfo: (data) => axios.post(`${BASE_URL}/settings/company`, data),
 };
+// Importar CSV
+export async function importProductsFromCSV(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const response = await fetch(`${BASE_URL}/products/import_csv`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    const contentType = response.headers.get("content-type");
+
+    if (!response.ok) {
+      if (contentType && contentType.includes("application/json")) {
+        const error = await response.json();
+        throw new Error(error.error || 'Erro ao importar CSV');
+      } else {
+        const text = await response.text();
+        throw new Error(`Erro HTTP ${response.status}: ${text}`);
+      }
+    }
+
+    return await response.json();
+  } catch (err) {
+    console.error('[IMPORT ERROR]', err);
+    throw new Error(`Falha na requisição: ${err.message}`);
+  }
+}
+

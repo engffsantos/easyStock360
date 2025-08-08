@@ -2,6 +2,8 @@ from flask import Blueprint, request, jsonify
 from app.models import db, Product, ProductHistory
 from datetime import datetime, timezone
 from sqlalchemy import inspect
+import csv
+import io
 
 products_bp = Blueprint('products', __name__, url_prefix='/api/products')
 
@@ -135,3 +137,51 @@ def delete_product(product_id):
     db.session.commit()
 
     return jsonify({'message': 'Produto removido com sucesso'}), 200
+
+# 📥 POST /api/products/import_csv - Importa produtos via CSV
+@products_bp.route('/import_csv', methods=['POST'])
+def import_products_csv():
+    if 'file' not in request.files:
+        return jsonify({'error': 'Nenhum arquivo enviado'}), 400
+
+    file = request.files['file']
+    if not file.filename.endswith('.csv'):
+        return jsonify({'error': 'Formato inválido, envie um arquivo CSV'}), 400
+
+    try:
+        stream = io.StringIO(file.stream.read().decode("utf-8"), newline=None)
+        reader = csv.DictReader(stream)
+
+        required_fields = ['name', 'sku', 'marca', 'tipo', 'cost', 'price', 'quantity', 'minStock']
+        products = []
+        skus_existentes = {p.sku for p in Product.query.all()}
+
+        for row in reader:
+            if not all(field in row for field in required_fields):
+                return jsonify({'error': f'Campos obrigatórios ausentes. Esperado: {required_fields}'}), 400
+
+            sku = row['sku'].strip() or generate_sku()
+            if sku in skus_existentes:
+                continue  # Evita duplicidade
+
+            product = Product(
+                name=row['name'].strip(),
+                sku=sku,
+                marca=row['marca'].strip(),
+                tipo=row['tipo'].strip(),
+                cost=float(row['cost']),
+                price=float(row['price']),
+                quantity=int(row['quantity']),
+                min_stock=int(row['minStock']),
+                created_at=datetime.now(timezone.utc)
+            )
+            products.append(product)
+            skus_existentes.add(sku)
+
+        db.session.add_all(products)
+        db.session.commit()
+
+        return jsonify({'message': f'{len(products)} produtos importados com sucesso.'}), 201
+
+    except Exception as e:
+        return jsonify({'error': f'Erro ao processar CSV: {str(e)}'}), 500
