@@ -4,7 +4,8 @@ import { api } from '../api/api';
 import { Card, Input, ModalWrapper, Spinner } from '../components/common';
 import { PlusIcon, EditIcon, TrashIcon, SearchIcon, MessageSquareIcon } from '../components/icons';
 import InputMask from 'react-input-mask';
-
+import CustomerDetailsModal from '../components/CustomerDetailsModal'; // Importa o novo modal
+import CustomerForm from './CustomerForm';
 // Botões temáticos
 const PrimaryButton = ({ children, onClick, type = 'button', className = '', ...props }) => (
   <button
@@ -32,91 +33,6 @@ const SecondaryButton = ({ children, onClick, type = 'button', className = '', .
 const formatCurrency = (value) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
-const CustomerForm = ({ customer, onSave, onClose, isSaving }) => {
-  const [formData, setFormData] = useState({ name: '', cpfCnpj: '', phone: '', address: '' });
-  const [errors, setErrors] = useState({});
-
-  useEffect(() => {
-    if (customer) {
-      setFormData({
-        name: customer.name || '',
-        cpfCnpj: customer.cpfCnpj || '',
-        phone: customer.phone || '',
-        address: customer.address || '',
-      });
-    } else {
-      setFormData({ name: '', cpfCnpj: '', phone: '', address: '' });
-    }
-    setErrors({});
-  }, [customer]);
-
-  const validate = () => {
-    const newErrors = {};
-    if (!formData.name.trim()) newErrors.name = 'Nome é obrigatório.';
-    if (!formData.cpfCnpj.trim()) newErrors.cpfCnpj = 'CPF/CNPJ é obrigatório.';
-    if (!formData.phone.trim()) newErrors.phone = 'Telefone é obrigatório.';
-    if (!formData.address.trim()) newErrors.address = 'Endereço é obrigatório.';
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (validate()) {
-      const sanitizedData = {
-        ...formData,
-        cpfCnpj: formData.cpfCnpj.replace(/\D/g, ''),
-      };
-      onSave(sanitizedData);
-    }
-  };
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <Input id="name" name="name" label="Nome Completo / Razão Social" value={formData.name} onChange={handleChange} required />
-      {errors.name && <p className="text-danger text-sm">{errors.name}</p>}
-
-      <div className="space-y-1">
-        <label htmlFor="cpfCnpj" className="block text-sm font-medium text-gray-700">CPF / CNPJ</label>
-        <InputMask
-          mask={formData.cpfCnpj.replace(/\D/g, '').length > 11 ? '99.999.999/9999-99' : '999.999.999-99'}
-          value={formData.cpfCnpj}
-          onChange={handleChange}
-        >
-          {(inputProps) => (
-            <input
-              {...inputProps}
-              id="cpfCnpj"
-              name="cpfCnpj"
-              required
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-            />
-          )}
-        </InputMask>
-        {errors.cpfCnpj && <p className="text-danger text-sm">{errors.cpfCnpj}</p>}
-      </div>
-
-      <Input id="phone" name="phone" label="Telefone" type="tel" value={formData.phone} onChange={handleChange} required />
-      {errors.phone && <p className="text-danger text-sm">{errors.phone}</p>}
-
-      <Input id="address" name="address" label="Endereço Completo" value={formData.address} onChange={handleChange} required />
-      {errors.address && <p className="text-danger text-sm">{errors.address}</p>}
-
-      <div className="flex justify-end gap-3 pt-4">
-        <SecondaryButton onClick={onClose} disabled={isSaving}>Cancelar</SecondaryButton>
-        <PrimaryButton type="submit" disabled={isSaving}>
-          {isSaving ? 'Salvando...' : 'Salvar Cliente'}
-        </PrimaryButton>
-      </div>
-    </form>
-  );
-};
-
 const CustomersPage = () => {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -126,10 +42,9 @@ const CustomersPage = () => {
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  const [interactions, setInteractions] = useState([]);
-  const [showInteractionModal, setShowInteractionModal] = useState(false);
-  const [activeCustomerName, setActiveCustomerName] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState(null); // Cliente ativo no modal de detalhes
 
+  // Busca lista de clientes
   const fetchCustomers = useCallback(async () => {
     try {
       setLoading(true);
@@ -190,18 +105,7 @@ const CustomersPage = () => {
     }
   };
 
-  const handleViewInteractions = async (customerId) => {
-    try {
-      const data = await api.getInteractionsByCustomerId(customerId);
-      const customer = customers.find(c => c.id === customerId);
-      setActiveCustomerName(customer?.name || '');
-      setInteractions(data);
-      setShowInteractionModal(true);
-    } catch (e) {
-      alert('Erro ao buscar interações do cliente.');
-    }
-  };
-
+  // Filtro por nome ou CPF/CNPJ
   const filteredCustomers = useMemo(() => {
     return customers.filter((c) => {
       const term = searchTerm.toLowerCase();
@@ -263,7 +167,7 @@ const CustomersPage = () => {
                         <button onClick={() => handleDeleteCustomer(customer.id)} className="text-danger hover:brightness-90" title="Remover">
                           <TrashIcon />
                         </button>
-                        <button onClick={() => handleViewInteractions(customer.id)} className="text-blue-600 hover:underline" title="Ver Interações">
+                        <button onClick={() => setSelectedCustomer(customer)} className="text-blue-600 hover:underline" title="Ver Detalhes">
                           <MessageSquareIcon />
                         </button>
                       </div>
@@ -280,25 +184,17 @@ const CustomersPage = () => {
         )}
       </Card>
 
+      {/* Modal para criar ou editar cliente */}
       <ModalWrapper isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingCustomer ? 'Editar Cliente' : 'Adicionar Novo Cliente'}>
         <CustomerForm customer={editingCustomer} onSave={handleSaveCustomer} onClose={() => setIsModalOpen(false)} isSaving={isSaving} />
       </ModalWrapper>
 
-      <ModalWrapper isOpen={showInteractionModal} onClose={() => setShowInteractionModal(false)} title={`Interações de ${activeCustomerName}`}>
-        {interactions.length > 0 ? (
-          <ul className="space-y-2">
-            {interactions.map((i, index) => (
-              <li key={index} className="border p-3 rounded-lg shadow-sm text-sm text-base-400">
-                <p><strong>Data:</strong> {new Date(i.createdAt).toLocaleString()}</p>
-                <p><strong>Tipo:</strong> {i.type}</p>
-                <p><strong>Descrição:</strong> {i.description}</p>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="">Nenhuma interação encontrada.</p>
-        )}
-      </ModalWrapper>
+      {/* Modal de detalhes: interações e compras */}
+      <CustomerDetailsModal
+        customer={selectedCustomer}
+        isOpen={!!selectedCustomer}
+        onClose={() => setSelectedCustomer(null)}
+      />
     </>
   );
 };

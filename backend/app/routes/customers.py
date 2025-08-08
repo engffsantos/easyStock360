@@ -1,6 +1,6 @@
 #backend/app/routes/customers.py
 from flask import Blueprint, request, jsonify
-from app.models import db, Customer
+from app.models import db, Customer, CustomerInteraction,  Sale, SaleItem
 from sqlalchemy.exc import SQLAlchemyError
 import re
 
@@ -114,3 +114,71 @@ def delete_customer(customer_id):
     except SQLAlchemyError as e:
         db.session.rollback()
         return jsonify({'error': 'Erro ao remover cliente', 'details': str(e)}), 400
+
+# -----------------------------
+# Listar interações de um cliente
+# -----------------------------
+@customers_bp.route('/<string:customer_id>/interactions/', methods=['GET'])
+def list_interactions(customer_id):
+    customer = Customer.query.get_or_404(customer_id)
+    interactions = CustomerInteraction.query.filter_by(customer_id=customer.id).order_by(CustomerInteraction.date.desc()).all()
+
+    return jsonify([
+        {
+            'id': i.id,
+            'type': i.type,
+            'notes': i.notes,
+            'date': i.date.isoformat()
+        } for i in interactions
+    ]), 200
+
+# -----------------------------
+# Adicionar nova interação
+# -----------------------------
+@customers_bp.route('/<string:customer_id>/interactions/', methods=['POST'])
+def add_interaction(customer_id):
+    customer = Customer.query.get_or_404(customer_id)
+    data = request.get_json()
+
+    required_fields = ['type', 'notes']
+    missing = [f for f in required_fields if f not in data or not data[f]]
+    if missing:
+        return jsonify({'error': f'Campos obrigatórios ausentes: {", ".join(missing)}'}), 400
+
+    interaction = CustomerInteraction(
+        customer_id=customer.id,
+        type=data['type'],
+        notes=data['notes']
+    )
+    try:
+        db.session.add(interaction)
+        db.session.commit()
+        return jsonify({'message': 'Interação registrada com sucesso.'}), 201
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return jsonify({'error': 'Erro ao salvar interação.', 'details': str(e)}), 400
+
+# -----------------------------
+# Listar compras de um cliente
+# -----------------------------
+@customers_bp.route('/<string:customer_id>/purchases/', methods=['GET'])
+def list_purchases(customer_id):
+    customer = Customer.query.get_or_404(customer_id)
+    purchases = Sale.query.filter_by(customer_id=customer.id).order_by(Sale.created_at.desc()).all()
+
+    return jsonify([
+        {
+            'id': sale.id,
+            'total': sale.total,
+            'status': sale.status,
+            'createdAt': sale.created_at.isoformat(),
+            'items': [
+                {
+                    'productName': item.product_name,
+                    'quantity': item.quantity,
+                    'price': item.price,
+                    'subtotal': item.quantity * item.price
+                } for item in sale.items
+            ]
+        } for sale in purchases
+    ]), 200

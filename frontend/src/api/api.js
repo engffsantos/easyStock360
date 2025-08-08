@@ -1,22 +1,31 @@
-//frontend/src/api/api.js
+// frontend/src/api/api.js
 import axios from 'axios';
 
 const BASE_URL = 'http://localhost:5000/api';
-// Corrigido com barra final
+
 export const api = {
+  // -------------------------
   // Customers
+  // -------------------------
   getCustomers: () => axios.get(`${BASE_URL}/customers/`).then(res => res.data),
   addCustomer: (data) => axios.post(`${BASE_URL}/customers/`, data),
   updateCustomer: (id, data) => axios.put(`${BASE_URL}/customers/${id}`, data),
   deleteCustomer: (id) => axios.delete(`${BASE_URL}/customers/${id}`),
+  addInteraction: (data) => axios.post(`${BASE_URL}/customers/${data.customerId}/interactions/`, data),
+  getInteractionsByCustomerId: (id) => axios.get(`${BASE_URL}/customers/${id}/interactions/`).then(res => res.data),
+  getCustomerPurchases: (id) =>   axios.get(`${BASE_URL}/customers/${id}/purchases/`).then(res => res.data),
 
+  // -------------------------
   // Products
+  // -------------------------
   getProducts: () => axios.get(`${BASE_URL}/products/`).then(res => res.data),
   addProduct: (data) => axios.post(`${BASE_URL}/products/`, data),
   updateProduct: (id, data) => axios.put(`${BASE_URL}/products/${id}/`, data),
   deleteProduct: (id) => axios.delete(`${BASE_URL}/products/${id}/`),
 
+  // -------------------------
   // Sales
+  // -------------------------
   getSales: () => axios.get(`${BASE_URL}/sales/`).then(res => res.data),
   getQuotes: () => axios.get(`${BASE_URL}/sales/quotes/`).then(res => res.data),
   getTransactionById: (id) => axios.get(`${BASE_URL}/sales/${id}/`).then(res => res.data),
@@ -26,22 +35,24 @@ export const api = {
   convertToSale: (id, paymentDetails) => axios.post(`${BASE_URL}/sales/${id}/convert/`, paymentDetails),
   cancelSale: (id) => axios.put(`${BASE_URL}/sales/${id}/cancel`),
 
+  // -------------------------
   // Financial
+  // -------------------------
   getFinancialEntries: () => axios.get(`${BASE_URL}/financial`).then(res => res.data),
   addFinancialEntry: (data) => axios.post(`${BASE_URL}/financial`, data),
   markFinancialEntryAsPaid: (id) => axios.post(`${BASE_URL}/financial/${id}/pay`),
   deleteFinancialEntry: (id) => axios.delete(`${BASE_URL}/financial/${id}`),
 
+  // -------------------------
   // Reports
+  // -------------------------
   getReportsData: (start, end) =>
     axios.get(`${BASE_URL}/reports/?start=${start}&end=${end}`).then(res => res.data),
   setGoals: (data) => axios.post(`${BASE_URL}/reports/goals/`, data),
 
-  // Interactions (opcional)
-  addInteraction: (data) => axios.post(`${BASE_URL}/customers/${data.customerId}/interactions/`, data),
-  getInteractionsByCustomerId: (id) => axios.get(`${BASE_URL}/customers/${id}/interactions/`).then(res => res.data),
-
+  // -------------------------
   // Dashboard
+  // -------------------------
   getDashboardStats: () =>
     Promise.all([
       api.getSales(),
@@ -69,8 +80,10 @@ export const api = {
         recentSales: sales.slice(0, 5)
       };
     }),
-    // Settings
+
+  // -------------------------
+  // Settings
+  // -------------------------
   getCompanyInfo: () => axios.get(`${BASE_URL}/settings/company`).then(res => res.data),
   saveCompanyInfo: (data) => axios.post(`${BASE_URL}/settings/company`, data),
-  
 };
