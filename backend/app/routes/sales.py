@@ -1,9 +1,11 @@
 # backend/app/routes/sales.py
 
 from flask import Blueprint, request, jsonify
-from app.models import db, Sale, SaleItem, Product
+from app.models import db, Sale, SaleItem, Product, Customer
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime
+#from backend.app.models import db, Sale, SaleItem, Product,
+
 
 sales_bp = Blueprint('sales', __name__)
 
@@ -59,6 +61,8 @@ def list_quotes():
 @sales_bp.route('/<id>/', methods=['GET'])
 def get_transaction(id):
     sale = Sale.query.get_or_404(id)
+    customer = Customer.query.get(sale.customer_id) if sale.customer_id else None
+
     return jsonify({
         'id': sale.id,
         'customerId': sale.customer_id,
@@ -66,6 +70,9 @@ def get_transaction(id):
         'status': sale.status,
         'total': sale.total,
         'createdAt': sale.created_at.isoformat(),
+        'customerCpfCnpj': customer.cpf_cnpj if customer else None,
+        'customerPhone': customer.phone if customer else None,
+        'customerAddress': customer.address if customer else None,
         'items': [
             {
                 'productId': i.product_id,
@@ -75,7 +82,6 @@ def get_transaction(id):
             } for i in sale.items
         ]
     }), 200
-
 
 # POST /api/sales/ - Cria nova venda ou orçamento
 @sales_bp.route('/', methods=['POST'])

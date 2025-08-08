@@ -1,39 +1,12 @@
-// frontend/src/pages/ReceiptPage.jsx
 import React, { useEffect, useState } from 'react';
 import { api } from '../api/api';
-import * as mockApi from '../api/mock';
 import { Spinner } from '../components/common';
 
 const formatCurrency = (value) =>
-  new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(value);
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
 const formatDate = (dateString) =>
-  new Intl.DateTimeFormat('pt-BR', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  }).format(new Date(dateString));
-
-const PrimaryButton = ({ children, onClick }) => (
-  <button
-    onClick={onClick}
-    className="px-4 py-2 rounded text-white"
-    style={{ backgroundColor: 'rgb(var(--color-primary-600))' }}
-  >
-    {children}
-  </button>
-);
-
-const SecondaryButton = ({ children, onClick }) => (
-  <button
-    onClick={onClick}
-    className="px-4 py-2 rounded text-white bg-base-400 hover:brightness-110"
-  >
-    {children}
-  </button>
-);
+  new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(dateString));
 
 const ReceiptPage = ({ transactionId, onBack }) => {
   const [transaction, setTransaction] = useState(null);
@@ -51,13 +24,12 @@ const ReceiptPage = ({ transactionId, onBack }) => {
 
       try {
         const tx = await api.getTransactionById(transactionId);
-        const info = await mockApi.getCompanyInfo();
-
+        const info = await api.getCompanyInfo();
         setTransaction(tx);
         setCompanyInfo(info);
       } catch (err) {
-        console.error('Erro ao carregar dados da transação:', err);
-        setError('Erro ao carregar dados da venda.');
+        console.error('Erro ao carregar dados:', err);
+        setError('Erro ao carregar os dados.');
       } finally {
         setLoading(false);
       }
@@ -66,122 +38,99 @@ const ReceiptPage = ({ transactionId, onBack }) => {
     fetchData();
   }, [transactionId]);
 
-  if (loading) {
-    return (
-      <div className="flex justify-center py-12">
-        <Spinner />
-      </div>
-    );
-  }
-
-  if (error || !transaction) {
-    return (
-      <div className="text-center text-danger p-6">
-        {error || 'Venda não encontrada.'}
-      </div>
-    );
-  }
+  if (loading) return <div className="flex justify-center py-12"><Spinner /></div>;
+  if (error || !transaction) return <div className="text-center text-danger p-6">{error || 'Venda não encontrada.'}</div>;
 
   return (
-    <div className="receipt-content max-w-2xl mx-auto p-6 bg-white rounded shadow print:p-0 print:shadow-none print:bg-white">
-      <h1 className="text-2xl font-bold mb-2">
-        {transaction.status === 'QUOTE' ? 'Orçamento' : 'Recibo de Venda'}
-      </h1>
-      <p className="text-sm text-base-400 mb-4">
-        Número: <strong>{transaction.id}</strong> — {formatDate(transaction.createdAt)}
-      </p>
-
-      {companyInfo && (
-        <div className="mb-4 text-sm">
-          {companyInfo.logoBase64 && (
-            <div className="mb-2">
-              <img
-                src={companyInfo.logoBase64}
-                alt="Logo da Empresa"
-                className="h-16 object-contain mb-2"
-              />
-            </div>
-          )}
-          <p className="font-bold">{companyInfo.name}</p>
-          <p>{companyInfo.address}</p>
-          <p>{companyInfo.phone}</p>
-          <p>{companyInfo.email}</p>
-          <p>CNPJ: {companyInfo.cnpj}</p>
+      <div className="receipt-content max-w-3xl mx-auto bg-white p-8 shadow print:shadow-none print:p-0">
+        {/* Cabeçalho */}
+        <div className="border-b-2 border-gray-200 pb-4 mb-4">
+          <h1 className="text-2xl font-bold text-gray-800">
+            {transaction.status === 'QUOTE' ? 'Orçamento' : 'Recibo de Venda'}
+          </h1>
+          <p className="text-sm text-gray-500">
+            Número: <strong>{transaction.id}</strong> — {formatDate(transaction.createdAt)}
+          </p>
         </div>
-      )}
 
-      <div className="mb-6 text-sm">
-        <p>
-          <strong className="text-base-400">Cliente:</strong>{' '}
-          {transaction.customerName || 'Consumidor Final'}
-        </p>
-        {transaction.paymentMethod && (
-          <p>
-            <strong className="text-base-400">Pagamento:</strong>{' '}
-            {transaction.paymentMethod.replace('_', ' ')}
-          </p>
+        {/* Empresa */}
+        {companyInfo && (
+            <div className="flex items-start gap-6 mb-6">
+              {companyInfo.logoBase64 && (
+                  <img src={companyInfo.logoBase64} alt="Logo da empresa" className="w-24 h-auto object-contain"/>
+              )}
+              <div className="text-sm text-gray-700">
+                <p><strong>{companyInfo.name}</strong></p>
+                <p>{companyInfo.address}</p>
+                <p>{companyInfo.phone}</p>
+                <p>{companyInfo.email}</p>
+                <p>CNPJ: {companyInfo.cnpj}</p>
+              </div> {/* Cliente */}
+        <div className="text-sm text-gray-800 mb-6 space-y-1">
+          <p><strong>Cliente:</strong> {transaction.customerName || 'Consumidor Final'}</p>
+          {(transaction.customerCpfCnpj || transaction.customerPhone) && (
+              <p>
+                {transaction.customerCpfCnpj && <span><strong>CPF/CNPJ:</strong> {transaction.customerCpfCnpj}</span>}
+                {transaction.customerCpfCnpj && transaction.customerPhone && <span className="mx-2">|</span>}
+                {transaction.customerPhone && <span><strong>Telefone:</strong> {transaction.customerPhone}</span>}
+              </p>
+          )}
+          {transaction.customerAddress && (
+              <p><strong>Endereço:</strong> {transaction.customerAddress}</p>
+          )}
+        </div>
+            </div>
         )}
-        {transaction.installments && transaction.installments > 1 && (
-          <p>
-            <strong className="text-base-400">Parcelas:</strong>{' '}
-            {transaction.installments}x
-          </p>
-        )}
+
+
+
+
+       {/* Tabela de produtos */}
+<table className="w-full text-sm border border-black border-collapse print:text-sm mb-6">
+  <thead className="bg-gray-100 text-gray-700">
+    <tr>
+      <th className="w-[40%] text-left border border-black p-2">Produto</th>
+      <th className="w-[15%] text-right border border-black p-2">Qtd.</th>
+      <th className="w-[20%] text-right border border-black p-2">Preço</th>
+      <th className="w-[25%] text-right border border-black p-2">Subtotal</th>
+    </tr>
+  </thead>
+  <tbody>
+    {transaction.items.map((item) => (
+      <tr key={item.productId}>
+        <td className="border border-black p-2">{item.productName}</td>
+        <td className="text-right border border-black p-2">{item.quantity}</td>
+        <td className="text-right border border-black p-2">{formatCurrency(item.price)}</td>
+        <td className="text-right border border-black p-2">
+          {formatCurrency(item.price * item.quantity)}
+        </td>
+      </tr>
+    ))}
+  </tbody>
+  <tfoot>
+    <tr className="font-bold text-gray-800">
+      <td colSpan="3" className="text-right border border-black p-2">Total:</td>
+      <td className="text-right border border-black p-2">{formatCurrency(transaction.total)}</td>
+    </tr>
+  </tfoot>
+</table>
+
+          {/* Botões */}
+          <div className="flex justify-between mt-8 print:hidden">
+            {onBack && (
+                <button onClick={onBack} className="px-4 py-2 bg-gray-700 text-white rounded hover:brightness-110">
+                  Voltar
+                </button>
+            )}
+            <button
+                onClick={() => setTimeout(() => window.print(), 100)}
+                className="px-4 py-2 bg-[#c05621] text-white rounded hover:brightness-110"
+            >
+              Imprimir {transaction.status === 'QUOTE' ? 'Orçamento' : 'Recibo'}
+            </button>
+          </div>
       </div>
-
-      <table className="w-full text-sm mb-6 border border-base-200">
-        <thead className="bg-base-100 text-base-400">
-          <tr>
-            <th className="p-2 text-left border-b border-base-200">Produto</th>
-            <th className="p-2 text-right border-b border-base-200">Qtd.</th>
-            <th className="p-2 text-right border-b border-base-200">Preço</th>
-            <th className="p-2 text-right border-b border-base-200">Subtotal</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(transaction.items || []).map((item) => (
-            <tr key={item.productId}>
-              <td className="p-2 border-b border-base-100">{item.productName}</td>
-              <td className="p-2 text-right border-b border-base-100">{item.quantity}</td>
-              <td className="p-2 text-right border-b border-base-100">
-                {formatCurrency(item.price)}
-              </td>
-              <td className="p-2 text-right border-b border-base-100">
-                {formatCurrency(item.price * item.quantity)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr className="font-bold text-base-400">
-            <td colSpan="3" className="p-2 text-right border-t border-base-200">
-              Total:
-            </td>
-            <td className="p-2 text-right border-t border-base-200">
-              {formatCurrency(transaction.total)}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
-
-      <div className="mt-6 print:hidden flex justify-between">
-        {onBack && (
-          <SecondaryButton onClick={onBack}>
-            Voltar
-          </SecondaryButton>
-        )}
-        <PrimaryButton
-          onClick={() => {
-            setTimeout(() => {
-              window.print();
-            }, 100);
-          }}
-        >
-          Imprimir {transaction.status === 'QUOTE' ? 'Orçamento' : 'Recibo'}
-        </PrimaryButton>
-      </div>
-    </div>
-  );
+);
 };
 
 export default ReceiptPage;
