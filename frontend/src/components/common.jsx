@@ -1,3 +1,4 @@
+//frontend/src/components/common.jsx
 import React from 'react';
 
 export const Card = ({ children, className = '' }) => (
@@ -29,18 +30,30 @@ export const Input = ({ id, label, ...props }) => (
   </div>
 );
 
+/**
+ * ModalWrapper
+ * - Acessível (role="dialog", aria-modal)
+ * - Conteúdo com max-h-[80vh] + overflow-y-auto (scroll sempre acessível)
+ * - Oculto em impressão (print:hidden) para não sujar recibos/orçamentos
+ */
 export const ModalWrapper = ({ isOpen, onClose, title, children }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 px-4">
-      <div className="bg-white rounded-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6 relative shadow-lg">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 print:hidden"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="bg-white rounded-xl w-full max-w-3xl max-h-[80vh] overflow-y-auto p-6 relative shadow-lg">
+        {/* Cabeçalho fixo dentro do modal para manter ações visíveis */}
         <div className="flex justify-between items-center mb-4 sticky top-0 bg-white z-10">
           <h2 className="text-xl font-bold text-base-400">{title}</h2>
           <button
             onClick={onClose}
             className="text-2xl font-bold leading-none text-base-300 hover:text-base-400"
             aria-label="Fechar"
+            type="button"
           >
             &times;
           </button>
@@ -54,7 +67,7 @@ export const ModalWrapper = ({ isOpen, onClose, title, children }) => {
 };
 
 export const Spinner = () => (
-  <svg className="animate-spin h-6 w-6 text-primary-700" viewBox="0 0 24 24" fill="none">
+  <svg className="animate-spin h-6 w-6 text-primary-700" viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
   </svg>

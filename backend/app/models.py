@@ -14,7 +14,7 @@ def generate_sku():
     return f"SKU-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
 
 # -----------------------------
-# Customer (mantido igual)
+# Customer (mantido)
 # -----------------------------
 class Customer(db.Model):
     __tablename__ = 'customers'
@@ -37,7 +37,7 @@ class Customer(db.Model):
         }
 
 # -----------------------------
-# CustomerInteraction (mantido igual)
+# CustomerInteraction (mantido)
 # -----------------------------
 class CustomerInteraction(db.Model):
     __tablename__ = 'customer_interactions'
@@ -49,7 +49,7 @@ class CustomerInteraction(db.Model):
     date = db.Column(db.DateTime, default=datetime.utcnow)
 
 # -----------------------------
-# Product (com novos campos)
+# Product (mantido)
 # -----------------------------
 class Product(db.Model):
     __tablename__ = 'products'
@@ -65,10 +65,10 @@ class Product(db.Model):
     min_stock = db.Column(db.Integer, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    history = db.relationship('ProductHistory', backref='product', lazy=True)
+    history = db.relationship('ProductHistory', backref='product', lazy=True, cascade='all, delete-orphan')
 
 # -----------------------------
-# ProductHistory (novo modelo)
+# ProductHistory (mantido)
 # -----------------------------
 class ProductHistory(db.Model):
     __tablename__ = 'product_history'
@@ -81,7 +81,7 @@ class ProductHistory(db.Model):
     new_value = db.Column(db.String, nullable=True)
 
 # -----------------------------
-# Sale (mantido igual)
+# Sale (ATUALIZADO)
 # -----------------------------
 class Sale(db.Model):
     __tablename__ = 'sales'
@@ -89,14 +89,35 @@ class Sale(db.Model):
     id = db.Column(db.String, primary_key=True, default=generate_uuid)
     customer_id = db.Column(db.String, db.ForeignKey('customers.id'), nullable=True)
     customer_name = db.Column(db.String, nullable=False)
-    status = db.Column(db.String, nullable=False)
+    status = db.Column(db.String, nullable=False)  # QUOTE | COMPLETED | CANCELLED
+
+    # Novos campos financeiros
+    subtotal = db.Column(db.Float, nullable=False, default=0.0)
+    discount_type = db.Column(db.String, nullable=True)   # 'PERCENT' | 'VALUE' | None
+    discount_value = db.Column(db.Float, nullable=False, default=0.0)  # percentual ou valor
+    freight = db.Column(db.Float, nullable=False, default=0.0)
     total = db.Column(db.Float, nullable=False, default=0.0)
+
+    # Pagamento da venda (quando COMPLETED)
+    payment_method = db.Column(db.String(32), nullable=True)   # PIX | DINHEIRO | CARTAO_CREDITO | CARTAO_DEBITO | BOLETO
+    installments = db.Column(db.Integer, nullable=False, default=1)
+
+    # Validade (apenas para QUOTE)
+    valid_until = db.Column(db.DateTime, nullable=True)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    items = db.relationship('SaleItem', backref='sale', lazy=True)
+    # Relacionamentos
+    items = db.relationship('SaleItem', backref='sale', lazy=True, cascade='all, delete-orphan')
+    payments = db.relationship('SalePayment', backref='sale', lazy=True, cascade='all, delete-orphan')
+
+    # Índices úteis
+    __table_args__ = (
+        db.Index('ix_sales_created_at', 'created_at'),
+    )
 
 # -----------------------------
-# SaleItem (mantido igual)
+# SaleItem (mantido)
 # -----------------------------
 class SaleItem(db.Model):
     __tablename__ = 'sale_items'
@@ -109,13 +130,34 @@ class SaleItem(db.Model):
     price = db.Column(db.Float, nullable=False)
 
 # -----------------------------
-# FinancialEntry (mantido igual)
+# SalePayment (NOVO)
+# -----------------------------
+class SalePayment(db.Model):
+    __tablename__ = 'sale_payments'
+
+    id = db.Column(db.String, primary_key=True, default=generate_uuid)
+    sale_id = db.Column(db.String, db.ForeignKey('sales.id'), nullable=False)
+
+    amount = db.Column(db.Float, nullable=False, default=0.0)
+    due_date = db.Column(db.Date, nullable=True)  # pode ser None para pagamento imediato
+    status = db.Column(db.String(16), nullable=False, default='PENDENTE')  # PENDENTE | PAGO | VENCIDO
+    payment_method = db.Column(db.String(32), nullable=True)  # PIX | DINHEIRO | CARTAO_CREDITO | ...
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.Index('ix_sale_payments_due_date', 'due_date'),
+        db.Index('ix_sale_payments_status', 'status'),
+    )
+
+# -----------------------------
+# FinancialEntry (mantido)
 # -----------------------------
 class FinancialEntry(db.Model):
     __tablename__ = 'financial_entries'
 
     id = db.Column(db.String, primary_key=True, default=generate_uuid)
-    type = db.Column(db.String, nullable=False)
+    type = db.Column(db.String, nullable=False)  # RECEITA | DESPESA
     description = db.Column(db.String, nullable=False)
     amount = db.Column(db.Float, nullable=False)
     due_date = db.Column(db.Date, nullable=False)
@@ -124,7 +166,7 @@ class FinancialEntry(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 # -----------------------------
-# ReportGoals (mantido igual)
+# ReportGoals (mantido)
 # -----------------------------
 class ReportGoals(db.Model):
     __tablename__ = 'report_goals'
@@ -133,8 +175,9 @@ class ReportGoals(db.Model):
     monthly_revenue = db.Column(db.Float, nullable=False, default=0.0)
     monthly_profit = db.Column(db.Float, nullable=False, default=0.0)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 # -----------------------------
-# CompanySettings (novo modelo)
+# CompanySettings (mantido)
 # -----------------------------
 class CompanySettings(db.Model):
     __tablename__ = 'company_settings'

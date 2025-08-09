@@ -3,10 +3,9 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { api } from '../api/api';
 import { Card, Input, ModalWrapper, Spinner } from '../components/common';
 import { PlusIcon, EditIcon, TrashIcon, SearchIcon, MessageSquareIcon } from '../components/icons';
-import InputMask from 'react-input-mask';
-import CustomerDetailsModal from '../components/CustomerDetailsModal'; // Importa o novo modal
+import CustomerDetailsModal from '../components/CustomerDetailsModal';
 import CustomerForm from './CustomerForm';
-// Botões temáticos
+
 const PrimaryButton = ({ children, onClick, type = 'button', className = '', ...props }) => (
   <button
     type={type}
@@ -19,20 +18,6 @@ const PrimaryButton = ({ children, onClick, type = 'button', className = '', ...
   </button>
 );
 
-const SecondaryButton = ({ children, onClick, type = 'button', className = '', ...props }) => (
-  <button
-    type={type}
-    onClick={onClick}
-    className={`px-4 py-2 rounded text-white bg-base-400 hover:brightness-110 flex items-center gap-2 ${className}`}
-    {...props}
-  >
-    {children}
-  </button>
-);
-
-const formatCurrency = (value) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
-
 const CustomersPage = () => {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -41,16 +26,14 @@ const CustomersPage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
 
-  const [selectedCustomer, setSelectedCustomer] = useState(null); // Cliente ativo no modal de detalhes
-
-  // Busca lista de clientes
   const fetchCustomers = useCallback(async () => {
     try {
       setLoading(true);
       const data = await api.getCustomers();
       setCustomers(data);
-    } catch (e) {
+    } catch {
       setError('Falha ao carregar os clientes.');
     } finally {
       setLoading(false);
@@ -76,7 +59,7 @@ const CustomersPage = () => {
       try {
         await api.deleteCustomer(id);
         await fetchCustomers();
-      } catch (e) {
+      } catch {
         alert('Falha ao remover o cliente.');
       }
     }
@@ -93,9 +76,9 @@ const CustomersPage = () => {
       setIsModalOpen(false);
       await fetchCustomers();
     } catch (e) {
-      if (e.response && e.response.status === 409) {
+      if (e.response?.status === 409) {
         alert('Já existe um cliente com este CPF/CNPJ.');
-      } else if (e.response && e.response.data?.error) {
+      } else if (e.response?.data?.error) {
         alert(e.response.data.error);
       } else {
         alert('Falha ao salvar o cliente.');
@@ -105,11 +88,14 @@ const CustomersPage = () => {
     }
   };
 
-  // Filtro por nome ou CPF/CNPJ
   const filteredCustomers = useMemo(() => {
     return customers.filter((c) => {
       const term = searchTerm.toLowerCase();
-      return c.name.toLowerCase().includes(term) || c.cpfCnpj.toLowerCase().includes(term);
+      return (
+        c.name.toLowerCase().includes(term) ||
+        c.cpfCnpj.toLowerCase().includes(term) ||
+        (c.email && c.email.toLowerCase().includes(term))
+      );
     });
   }, [customers, searchTerm]);
 
@@ -118,8 +104,7 @@ const CustomersPage = () => {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-base-400">Clientes</h1>
         <PrimaryButton onClick={handleAddCustomer}>
-          <PlusIcon />
-          Adicionar Cliente
+          <PlusIcon /> Adicionar Cliente
         </PrimaryButton>
       </div>
 
@@ -127,7 +112,7 @@ const CustomersPage = () => {
         <div className="relative flex-grow">
           <Input
             id="search"
-            label="Buscar por nome ou CPF/CNPJ"
+            label="Buscar por nome, CPF/CNPJ ou E-mail"
             placeholder="Digite para buscar..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -148,8 +133,10 @@ const CustomersPage = () => {
               <thead className="bg-white">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase">Nome</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase">CPF / CNPJ</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase">CPF/CNPJ</th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase">Telefone</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase">E-mail</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase">Endereço</th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase">Ações</th>
                 </tr>
               </thead>
@@ -159,23 +146,19 @@ const CustomersPage = () => {
                     <td className="px-6 py-4 text-sm font-medium text-base-400">{customer.name}</td>
                     <td className="px-6 py-4 text-sm">{customer.cpfCnpj}</td>
                     <td className="px-6 py-4 text-sm">{customer.phone}</td>
+                    <td className="px-6 py-4 text-sm">{customer.email || '-'}</td>
+                    <td className="px-6 py-4 text-sm truncate max-w-xs">{customer.address}</td>
                     <td className="px-6 py-4 text-sm font-medium">
                       <div className="flex gap-2">
-                        <button onClick={() => handleEditCustomer(customer)} className="hover:text-primary-800" title="Editar">
-                          <EditIcon />
-                        </button>
-                        <button onClick={() => handleDeleteCustomer(customer.id)} className="text-danger hover:brightness-90" title="Remover">
-                          <TrashIcon />
-                        </button>
-                        <button onClick={() => setSelectedCustomer(customer)} className="text-blue-600 hover:underline" title="Ver Detalhes">
-                          <MessageSquareIcon />
-                        </button>
+                        <button onClick={() => handleEditCustomer(customer)} title="Editar"><EditIcon /></button>
+                        <button onClick={() => handleDeleteCustomer(customer.id)} className="text-danger" title="Remover"><TrashIcon /></button>
+                        <button onClick={() => setSelectedCustomer(customer)} title="Ver Detalhes"><MessageSquareIcon /></button>
                       </div>
                     </td>
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={4} className="text-center py-12">Nenhum cliente encontrado.</td>
+                    <td colSpan={6} className="text-center py-12">Nenhum cliente encontrado.</td>
                   </tr>
                 )}
               </tbody>
@@ -184,12 +167,10 @@ const CustomersPage = () => {
         )}
       </Card>
 
-      {/* Modal para criar ou editar cliente */}
       <ModalWrapper isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingCustomer ? 'Editar Cliente' : 'Adicionar Novo Cliente'}>
         <CustomerForm customer={editingCustomer} onSave={handleSaveCustomer} onClose={() => setIsModalOpen(false)} isSaving={isSaving} />
       </ModalWrapper>
 
-      {/* Modal de detalhes: interações e compras */}
       <CustomerDetailsModal
         customer={selectedCustomer}
         isOpen={!!selectedCustomer}

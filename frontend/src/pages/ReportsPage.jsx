@@ -1,4 +1,4 @@
-//frontend/src/pages/ReportsPage.jsx
+// Atualização do ReportsPage.jsx com funcionalidades sugeridas
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/api';
 import { Card, Input, Spinner, ModalWrapper, Select } from '../components/common';
@@ -21,9 +21,10 @@ const Button = ({ children, onClick, type = 'button', variant = 'primary', class
 
 const ProgressBar = ({ value, max }) => {
   const percent = Math.min(100, (value / max) * 100);
+  const bgColor = percent >= 75 ? 'bg-primary-500' : percent > 0 ? 'bg-yellow-500' : 'bg-base-200';
   return (
     <div className="w-full bg-base-200 rounded h-3">
-      <div className="bg-primary-500 h-3 rounded" style={{ width: `${percent}%` }} />
+      <div className={`${bgColor} h-3 rounded`} style={{ width: `${percent}%` }} />
     </div>
   );
 };
@@ -54,6 +55,23 @@ const downloadCSV = (data, filename) => {
   document.body.removeChild(link);
 };
 
+const ReportTable = ({ headers, children }) => (
+  <div className="overflow-x-auto">
+    <table className="min-w-full text-sm border border-base-200">
+      <thead className="bg-base-100">
+        <tr>
+          {headers.map((h, i) => (
+            <th key={i} className="p-2 border-b border-base-200 text-left font-medium text-base-400 uppercase text-xs">{h}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {children}
+      </tbody>
+    </table>
+  </div>
+);
+
 const ReportsPage = () => {
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
@@ -73,6 +91,7 @@ const ReportsPage = () => {
     try {
       const report = await api.getReportsData(start, end);
       setReportData(report);
+      setNewGoals(report.goals);
     } catch {
       alert('Erro ao carregar relatório');
     } finally {
@@ -145,31 +164,20 @@ const ReportsPage = () => {
         <Button onClick={() => downloadCSV(filteredProducts, 'relatorio_estoque.csv')}><DownloadIcon className="mr-2" />Exportar CSV</Button>
         <Button onClick={() => window.print()}><PrintIcon className="mr-2" />Imprimir</Button>
       </div>
-      <table className="min-w-full text-sm">
-        <thead>
-          <tr className="text-left ">
-            <th className="p-2">Produto</th>
-            <th className="p-2">SKU</th>
-            <th className="p-2 text-center">Qtd. Estoque</th>
-            <th className="p-2 text-center">Estoque Mínimo</th>
-            <th className="p-2">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredProducts.map((p) => {
-            const isLow = p.quantity < p.min_stock;
-            return (
-              <tr key={p.id} className="border-t">
-                <td className="p-2 font-medium text-base-400">{p.name}</td>
-                <td className="p-2 font-mono ">{p.sku}</td>
-                <td className="p-2 text-center">{p.quantity}</td>
-                <td className="p-2 text-center">{p.min_stock}</td>
-                <td className={`p-2 font-semibold ${isLow ? 'text-red-600' : 'text-green-600'}`}>{isLow ? 'Abaixo do mínimo' : 'OK'}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <ReportTable headers={["Produto", "SKU", "Qtd. Estoque", "Estoque Mínimo", "Status"]}>
+        {filteredProducts.map((p) => {
+          const isLow = p.quantity < p.min_stock;
+          return (
+            <tr key={p.id} className="border-t">
+              <td className="p-2 font-medium text-base-400">{p.name}</td>
+              <td className="p-2 font-mono">{p.sku}</td>
+              <td className="p-2 text-center">{p.quantity}</td>
+              <td className="p-2 text-center">{p.min_stock}</td>
+              <td className={`p-2 font-semibold ${isLow ? 'text-red-600' : 'text-green-600'}`}>{isLow ? 'Abaixo do mínimo' : 'OK'}</td>
+            </tr>
+          );
+        })}
+      </ReportTable>
     </ReportCard>
   );
 
@@ -231,24 +239,15 @@ const ReportsPage = () => {
 
               <ReportCard title="Clientes Inadimplentes">
                 {reportData.defaultingCustomers.length > 0 ? (
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr className="text-left ">
-                        <th className="p-2">Cliente</th>
-                        <th className="p-2">Valor</th>
-                        <th className="p-2">Vencimento</th>
+                  <ReportTable headers={["Cliente", "Valor", "Vencimento"]}>
+                    {reportData.defaultingCustomers.map((c, i) => (
+                      <tr key={i} className="border-t">
+                        <td className="p-2 font-medium">{c.customerName}</td>
+                        <td className="p-2 text-red-600">{formatCurrency(c.amountDue)}</td>
+                        <td className="p-2">{formatDate(c.dueDate)}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {reportData.defaultingCustomers.map((c, i) => (
-                        <tr key={i} className="border-t">
-                          <td className="p-2 font-medium">{c.customerName}</td>
-                          <td className="p-2 text-red-600">{formatCurrency(c.amountDue)}</td>
-                          <td className="p-2">{formatDate(c.dueDate)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                    ))}
+                  </ReportTable>
                 ) : <p className="">Sem inadimplentes no período.</p>}
               </ReportCard>
             </>

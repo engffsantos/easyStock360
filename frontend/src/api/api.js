@@ -3,6 +3,18 @@ import axios from 'axios';
 
 const BASE_URL = 'http://localhost:5000/api';
 
+// Helper: normaliza erro de conversão de orçamento expirado (422)
+function normalizeConvertError(err) {
+  const status = err?.response?.status;
+  const data = err?.response?.data;
+  if (status === 422) {
+    const e = new Error(data?.error || 'Orçamento expirado');
+    e.code = data?.code || 'QUOTE_EXPIRED';
+    throw e;
+  }
+  throw err;
+}
+
 export const api = {
   // -------------------------
   // Customers
@@ -13,7 +25,7 @@ export const api = {
   deleteCustomer: (id) => axios.delete(`${BASE_URL}/customers/${id}`),
   addInteraction: (data) => axios.post(`${BASE_URL}/customers/${data.customerId}/interactions/`, data),
   getInteractionsByCustomerId: (id) => axios.get(`${BASE_URL}/customers/${id}/interactions/`).then(res => res.data),
-  getCustomerPurchases: (id) =>   axios.get(`${BASE_URL}/customers/${id}/purchases/`).then(res => res.data),
+  getCustomerPurchases: (id) => axios.get(`${BASE_URL}/customers/${id}/purchases/`).then(res => res.data),
 
   // -------------------------
   // Products
@@ -26,13 +38,27 @@ export const api = {
   // -------------------------
   // Sales
   // -------------------------
+  // Observação: o backend já retorna os novos campos:
+  // subtotal, discountType, discountValue, freight, total, validUntil
   getSales: () => axios.get(`${BASE_URL}/sales/`).then(res => res.data),
   getQuotes: () => axios.get(`${BASE_URL}/sales/quotes/`).then(res => res.data),
   getTransactionById: (id) => axios.get(`${BASE_URL}/sales/${id}/`).then(res => res.data),
+
+  // add/update aceitam os novos campos; o servidor recalcula os totais
   addTransaction: (data) => axios.post(`${BASE_URL}/sales/`, data),
   updateTransaction: (id, data) => axios.put(`${BASE_URL}/sales/${id}/`, data),
   deleteTransaction: (id) => axios.delete(`${BASE_URL}/sales/${id}/`),
-  convertToSale: (id, paymentDetails) => axios.post(`${BASE_URL}/sales/${id}/convert/`, paymentDetails),
+
+  // Conversão trata 422 (QUOTE_EXPIRED) e lança erro com .code
+  convertToSale: async (id, paymentDetails) => {
+    try {
+      const res = await axios.post(`${BASE_URL}/sales/${id}/convert/`, paymentDetails);
+      return res.data;
+    } catch (err) {
+      normalizeConvertError(err);
+    }
+  },
+
   cancelSale: (id) => axios.put(`${BASE_URL}/sales/${id}/cancel`),
 
   // -------------------------
@@ -49,19 +75,23 @@ export const api = {
   getReportsData: (start, end) =>
     axios.get(`${BASE_URL}/reports/?start=${start}&end=${end}`).then(res => res.data),
   setGoals: (data) => axios.post(`${BASE_URL}/reports/goals/`, data),
+  getGoals: () => axios.get(`${BASE_URL}/reports/goals/`).then(res => res.data),
 
   // -------------------------
   // Dashboard
   // -------------------------
+  // Ajustado: usa getQuotes() para contar orçamentos abertos corretamente
   getDashboardStats: () =>
     Promise.all([
-      api.getSales(),
+      api.getSales(),      // vendas COMPLETED
+      api.getQuotes(),     // orçamentos QUOTE
       api.getFinancialEntries(),
       api.getProducts()
-    ]).then(([sales, entries, products]) => {
+    ]).then(([sales, quotes, entries, products]) => {
       const today = new Date().toISOString().slice(0, 10);
-      const salesToday = sales.filter(s => s.createdAt.startsWith(today));
-      const openQuotes = sales.filter(s => s.status === 'QUOTE');
+
+      const salesToday = sales.filter(s => (s.createdAt || '').startsWith(today));
+      const openQuotes = quotes; // já são QUOTE
 
       const receivable = entries.filter(e => e.type === 'RECEITA' && e.status !== 'PAGO');
       const payable = entries.filter(e => e.type === 'DESPESA' && e.status !== 'PAGO');
@@ -71,10 +101,10 @@ export const api = {
 
       return {
         salesTodayCount: salesToday.length,
-        salesTodayValue: salesToday.reduce((sum, s) => sum + s.total, 0),
+        salesTodayValue: salesToday.reduce((sum, s) => sum + (s.total || 0), 0),
         openQuotesCount: openQuotes.length,
-        totalReceivable: receivable.reduce((sum, e) => sum + e.amount, 0),
-        totalPayable: payable.reduce((sum, e) => sum + e.amount, 0),
+        totalReceivable: receivable.reduce((sum, e) => sum + (e.amount || 0), 0),
+        totalPayable: payable.reduce((sum, e) => sum + (e.amount || 0), 0),
         overduePayableCount: overduePayable.length,
         lowStockProductsCount: lowStock.length,
         recentSales: sales.slice(0, 5)
@@ -87,6 +117,7 @@ export const api = {
   getCompanyInfo: () => axios.get(`${BASE_URL}/settings/company`).then(res => res.data),
   saveCompanyInfo: (data) => axios.post(`${BASE_URL}/settings/company`, data),
 };
+
 // Importar CSV
 export async function importProductsFromCSV(file) {
   const formData = new FormData();
@@ -98,10 +129,10 @@ export async function importProductsFromCSV(file) {
       body: formData,
     });
 
-    const contentType = response.headers.get("content-type");
+    const contentType = response.headers.get('content-type');
 
     if (!response.ok) {
-      if (contentType && contentType.includes("application/json")) {
+      if (contentType && contentType.includes('application/json')) {
         const error = await response.json();
         throw new Error(error.error || 'Erro ao importar CSV');
       } else {
@@ -116,4 +147,3 @@ export async function importProductsFromCSV(file) {
     throw new Error(`Falha na requisição: ${err.message}`);
   }
 }
-

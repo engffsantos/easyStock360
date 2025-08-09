@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 
 from app.models import db, Sale, Product, FinancialEntry, ReportGoals
 from flask import Blueprint, request, jsonify
+from flask_cors import cross_origin
 
 reports_bp = Blueprint('reports', __name__)
 
@@ -114,7 +115,8 @@ def generate_report():
 
 
 # POST /api/reports/goals - Salva metas mensais
-@reports_bp.route('/goals', methods=['POST'])
+@reports_bp.route('/goals/', methods=['POST','OPTIONS'])
+@cross_origin()
 def set_goals():
     data = request.get_json()
     goals = get_or_create_goals()
@@ -123,3 +125,11 @@ def set_goals():
     goals.updated_at = datetime.utcnow()
     db.session.commit()
     return jsonify({'message': 'Metas atualizadas com sucesso'})
+@reports_bp.route('/goals/', methods=['GET'])
+@cross_origin()
+def get_goals():
+    goals = get_or_create_goals()
+    return jsonify({
+        'monthlyRevenue': goals.monthly_revenue,
+        'monthlyProfit': goals.monthly_profit
+    })

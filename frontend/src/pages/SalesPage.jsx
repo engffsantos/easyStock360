@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+// frontend/src/pages/SalesPage.jsx
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '../api/api';
 import SaleForm from './SaleForm';
-import { Card, Spinner, ModalWrapper } from '../components/common';
-import { PlusIcon, TrashIcon, CheckCircleIcon, EditIcon } from '../components/icons';
+import { Card, Spinner, ModalWrapper, Input } from '../components/common';
+import { PlusIcon, TrashIcon, CheckCircleIcon, EditIcon, SearchIcon } from '../components/icons';
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -15,20 +16,35 @@ const formatDate = (dateString) =>
 
 const SalesPage = ({ onNavigateToReceipt }) => {
   const [activeTab, setActiveTab] = useState('sales');
+
   const [sales, setSales] = useState([]);
   const [quotes, setQuotes] = useState([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [paymentDetails, setPaymentDetails] = useState({ paymentMethod: 'PIX', installments: 1 });
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingTransaction, setEditingTransaction] = useState(null);
+  // Conversão
+  const [paymentDetails, setPaymentDetails] = useState({ paymentMethod: 'PIX', installments: 1 });
   const [quoteToConvert, setQuoteToConvert] = useState(null);
   const [isConverting, setIsConverting] = useState(false);
+
+  // Modal de criação/edição
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState(null);
+
+  // Filtro de VENDAS por data
+  const [salesDateFrom, setSalesDateFrom] = useState(''); // yyyy-mm-dd
+  const [salesDateTo, setSalesDateTo] = useState('');     // yyyy-mm-dd
+
+  // Filtros de ORÇAMENTOS (texto e período)
+  const [quoteSearch, setQuoteSearch] = useState('');
+  const [quoteDateFrom, setQuoteDateFrom] = useState('');
+  const [quoteDateTo, setQuoteDateTo] = useState('');
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
       const [salesData, quotesData] = await Promise.all([
         api.getSales(),
         api.getQuotes(),
@@ -51,9 +67,7 @@ const SalesPage = ({ onNavigateToReceipt }) => {
     setIsModalOpen(true);
   };
 
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-  };
+  const handleCloseModal = () => setIsModalOpen(false);
 
   const handleSaveSuccess = () => {
     setIsModalOpen(false);
@@ -140,7 +154,74 @@ const SalesPage = ({ onNavigateToReceipt }) => {
     </button>
   );
 
+  // --------- listas com ordenação ---------
+  const sortedSales = useMemo(
+    () => [...sales].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+    [sales]
+  );
+
+  const sortedQuotes = useMemo(
+    () => [...quotes].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+    [quotes]
+  );
+
+  // --------- filtros de vendas (por período) ----------
+  const filteredSales = useMemo(() => {
+    return sortedSales.filter((s) => {
+      const d = new Date(s.createdAt);
+      const okFrom = !salesDateFrom || d >= new Date(`${salesDateFrom}T00:00:00`);
+      const okTo = !salesDateTo || d <= new Date(`${salesDateTo}T23:59:59`);
+      return okFrom && okTo;
+    });
+  }, [sortedSales, salesDateFrom, salesDateTo]);
+
+  // --------- filtros de orçamentos ----------
+  const filteredQuotes = useMemo(() => {
+    const term = quoteSearch.trim().toLowerCase();
+    return sortedQuotes.filter((q) => {
+      const okText =
+        !term ||
+        (q.customerName || '').toLowerCase().includes(term) ||
+        (q.id || '').toLowerCase().includes(term);
+
+      const d = new Date(q.createdAt);
+      const okFrom = !quoteDateFrom || d >= new Date(`${quoteDateFrom}T00:00:00`);
+      const okTo = !quoteDateTo || d <= new Date(`${quoteDateTo}T23:59:59`);
+
+      return okText && okFrom && okTo;
+    });
+  }, [sortedQuotes, quoteSearch, quoteDateFrom, quoteDateTo]);
+
+  // --------- tabelas ----------
   const renderSalesTable = () => (
+    <>
+      {/* Filtro por data - VENDAS */}
+      <Card className="!p-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+          <div>
+            <label className="text-sm block mb-1">Data inicial</label>
+            <input
+              type="date"
+              value={salesDateFrom}
+              onChange={(e) => setSalesDateFrom(e.target.value)}
+              className="px-3 py-2 border border-base-200 rounded-xl text-sm w-full"
+            />
+          </div>
+          <div>
+            <label className="text-sm block mb-1">Data final</label>
+            <input
+              type="date"
+              value={salesDateTo}
+              onChange={(e) => setSalesDateTo(e.target.value)}
+              className="px-3 py-2 border border-base-200 rounded-xl text-sm w-full"
+            />
+          </div>
+          <div className="md:col-span-2 text-sm text-base-400">
+            Dica: deixe em branco para ver todas as vendas. O período afeta apenas a aba “Vendas”.
+          </div>
+        </div>
+      </Card>
+
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-base-200">
         <thead className="bg-white">
@@ -153,8 +234,8 @@ const SalesPage = ({ onNavigateToReceipt }) => {
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-base-200">
-          {sales.length > 0 ? (
-            sales.map((sale) => (
+          {filteredSales.length > 0 ? (
+            filteredSales.map((sale) => (
               <tr
                 key={sale.id}
                 className={sale.status === 'CANCELLED' ? 'opacity-50 line-through' : ''}
@@ -178,57 +259,97 @@ const SalesPage = ({ onNavigateToReceipt }) => {
           ) : (
             <tr>
               <td colSpan="5" className="text-center py-12">
-                Nenhuma venda registrada.
+                Nenhuma venda encontrada para o período.
               </td>
             </tr>
           )}
         </tbody>
       </table>
     </div>
+    </>
   );
 
   const renderQuotesTable = () => (
-    <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-base-200">
-        <thead className="bg-white">
-          <tr>
-            <th className="px-6 py-3 text-left text-xs uppercase">Data</th>
-            <th className="px-6 py-3 text-left text-xsuppercase">Cliente</th>
-            <th className="px-6 py-3 text-left text-xs uppercase">Total</th>
-            <th className="px-6 py-3 text-left text-xs uppercase">Ações</th>
-          </tr>
-        </thead>
-        <tbody className="bg-white divide-y divide-base-200">
-          {quotes.length > 0 ? (
-            quotes.map(quote => (
-              <tr key={quote.id}>
-                <td className="px-6 py-4 text-sm ">{formatDate(quote.createdAt)}</td>
-                <td className="px-6 py-4 text-sm text-base-400">{quote.customerName || 'Consumidor Final'}</td>
-                <td className="px-6 py-4 text-sm font-bold text-primary-800">{formatCurrency(quote.total)}</td>
-                <td className="px-6 py-4">
-                  <div className="flex gap-2 items-center flex-wrap">
-                    <PrimaryButton className="!py-1 !px-2 text-sm" onClick={() => setQuoteToConvert(quote)}>
-                      <CheckCircleIcon className="w-4 h-4" /> Converter
-                    </PrimaryButton>
-                    <PrimaryButton className="!py-1 !px-2" onClick={() => onNavigateToReceipt(quote.id)}>
-                      Ver Orçamento
-                    </PrimaryButton>
-                    <button onClick={() => handleEditQuote(quote)} className=" hover:text-primary-800 p-1 rounded" title="Editar Orçamento">
-                      <EditIcon />
-                    </button>
-                    <button onClick={() => handleDeleteQuote(quote.id)} className="text-danger hover:brightness-90 p-1 rounded" title="Excluir Orçamento">
-                      <TrashIcon />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))
-          ) : (
-            <tr><td colSpan="4" className="text-center py-12 ">Nenhum orçamento registrado.</td></tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+    <>
+      {/* Filtros rápidos - ORÇAMENTOS */}
+      <Card className="!p-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+          <div className="relative md:col-span-3">
+            <Input
+              id="qsearch"
+              label="Buscar por Cliente ou Nº do Orçamento"
+              placeholder="Ex.: Maria Silva ou 7b0c-..."
+              value={quoteSearch}
+              onChange={(e) => setQuoteSearch(e.target.value)}
+              className="pl-10"
+            />
+            <div className="absolute inset-y-0 left-0 top-6 flex items-center pl-3 pointer-events-none">
+              <SearchIcon className="text-base-200" />
+            </div>
+          </div>
+          <div>
+            <label className="text-sm block mb-1">Data inicial</label>
+            <input
+              type="date"
+              value={quoteDateFrom}
+              onChange={(e) => setQuoteDateFrom(e.target.value)}
+              className="px-3 py-2 border border-base-200 rounded-xl text-sm w-full"
+            />
+          </div>
+          <div>
+            <label className="text-sm block mb-1">Data final</label>
+            <input
+              type="date"
+              value={quoteDateTo}
+              onChange={(e) => setQuoteDateTo(e.target.value)}
+              className="px-3 py-2 border border-base-200 rounded-xl text-sm w-full"
+            />
+          </div>
+        </div>
+      </Card>
+
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-base-200">
+          <thead className="bg-white">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs uppercase">Data</th>
+              <th className="px-6 py-3 text-left text-xsuppercase">Cliente</th>
+              <th className="px-6 py-3 text-left text-xs uppercase">Total</th>
+              <th className="px-6 py-3 text-left text-xs uppercase">Ações</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-base-200">
+            {filteredQuotes.length > 0 ? (
+              filteredQuotes.map(quote => (
+                <tr key={quote.id}>
+                  <td className="px-6 py-4 text-sm ">{formatDate(quote.createdAt)}</td>
+                  <td className="px-6 py-4 text-sm text-base-400">{quote.customerName || 'Consumidor Final'}</td>
+                  <td className="px-6 py-4 text-sm font-bold text-primary-800">{formatCurrency(quote.total)}</td>
+                  <td className="px-6 py-4">
+                    <div className="flex gap-2 items-center flex-wrap">
+                      <PrimaryButton className="!py-1 !px-2 text-sm" onClick={() => setQuoteToConvert(quote)}>
+                        <CheckCircleIcon className="w-4 h-4" /> Converter
+                      </PrimaryButton>
+                      <PrimaryButton className="!py-1 !px-2" onClick={() => onNavigateToReceipt(quote.id)}>
+                        Ver Orçamento
+                      </PrimaryButton>
+                      <button onClick={() => handleEditQuote(quote)} className=" hover:text-primary-800 p-1 rounded" title="Editar Orçamento">
+                        <EditIcon />
+                      </button>
+                      <button onClick={() => handleDeleteQuote(quote.id)} className="text-danger hover:brightness-90 p-1 rounded" title="Excluir Orçamento">
+                        <TrashIcon />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr><td colSpan="4" className="text-center py-12 ">Nenhum orçamento encontrado.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 
   const renderContent = () => {
@@ -256,6 +377,7 @@ const SalesPage = ({ onNavigateToReceipt }) => {
 
       <Card>{renderContent()}</Card>
 
+      {/* Modal de criação/edição */}
       <ModalWrapper
         isOpen={isModalOpen}
         onClose={handleCloseModal}
@@ -269,72 +391,70 @@ const SalesPage = ({ onNavigateToReceipt }) => {
         />
       </ModalWrapper>
 
+      {/* Modal de conversão */}
       {quoteToConvert && (
-  <ModalWrapper
-    isOpen={true}
-    onClose={() => setQuoteToConvert(null)}
-    title="Converter Orçamento"
-  >
-    <div className="w-full max-w-3xl md:max-w-4xl lg:max-w-5xl mx-auto">
-      {/* Container scrollável com limite de altura da viewport */}
-      <div className="space-y-4 max-h-[80vh] overflow-y-auto px-1">
-        <p>Confirme os detalhes de pagamento para converter este orçamento em uma venda.</p>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block mb-1 text-sm">Forma de pagamento</label>
-            <select
-              value={paymentDetails.paymentMethod}
-              onChange={(e) =>
-                setPaymentDetails((prev) => ({
-                  ...prev,
-                  paymentMethod: e.target.value,
-                  installments: 1
-                }))
-              }
-              className="w-full p-2 border rounded"
-            >
-              <option value="PIX">PIX</option>
-              <option value="DINHEIRO">Dinheiro</option>
-              <option value="CARTAO_CREDITO">Cartão de Crédito</option>
-              <option value="CARTAO_DEBITO">Cartão de Débito</option>
-              <option value="BOLETO">Boleto</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block mb-1 text-sm">Parcelas</label>
-            <input
-              type="number"
-              min="1"
-              value={paymentDetails.installments}
-              onChange={(e) =>
-                setPaymentDetails((prev) => ({
-                  ...prev,
-                  installments: parseInt(e.target.value) || 1
-                }))
-              }
-              disabled={
-                paymentDetails.paymentMethod !== 'CARTAO_CREDITO' &&
-                paymentDetails.paymentMethod !== 'BOLETO'
-              }
-              className="w-full p-2 border rounded"
-            />
-          </div>
-        </div>
-
-        <PrimaryButton
-          onClick={() => handleConvertToSale(quoteToConvert.id, paymentDetails)}
-          disabled={isConverting}
+        <ModalWrapper
+          isOpen={true}
+          onClose={() => setQuoteToConvert(null)}
+          title="Converter Orçamento"
         >
-          {isConverting ? 'Convertendo...' : 'Confirmar Conversão'}
-        </PrimaryButton>
-      </div>
-    </div>
-  </ModalWrapper>
-)}
+          <div className="w-full max-w-3xl md:max-w-4xl lg:max-w-5xl mx-auto">
+            <div className="space-y-4 max-h-[80vh] overflow-y-auto px-1">
+              <p>Confirme os detalhes de pagamento para converter este orçamento em uma venda.</p>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block mb-1 text-sm">Forma de pagamento</label>
+                  <select
+                    value={paymentDetails.paymentMethod}
+                    onChange={(e) =>
+                      setPaymentDetails((prev) => ({
+                        ...prev,
+                        paymentMethod: e.target.value,
+                        installments: 1
+                      }))
+                    }
+                    className="w-full p-2 border rounded"
+                  >
+                    <option value="PIX">PIX</option>
+                    <option value="DINHEIRO">Dinheiro</option>
+                    <option value="CARTAO_CREDITO">Cartão de Crédito</option>
+                    <option value="CARTAO_DEBITO">Cartão de Débito</option>
+                    <option value="BOLETO">Boleto</option>
+                  </select>
+                </div>
 
+                <div>
+                  <label className="block mb-1 text-sm">Parcelas</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={paymentDetails.installments}
+                    onChange={(e) =>
+                      setPaymentDetails((prev) => ({
+                        ...prev,
+                        installments: parseInt(e.target.value) || 1
+                      }))
+                    }
+                    disabled={
+                      paymentDetails.paymentMethod !== 'CARTAO_CREDITO' &&
+                      paymentDetails.paymentMethod !== 'BOLETO'
+                    }
+                    className="w-full p-2 border rounded"
+                  />
+                </div>
+              </div>
+
+              <PrimaryButton
+                onClick={() => handleConvertToSale(quoteToConvert.id, paymentDetails)}
+                disabled={isConverting}
+              >
+                {isConverting ? 'Convertendo...' : 'Confirmar Conversão'}
+              </PrimaryButton>
+            </div>
+          </div>
+        </ModalWrapper>
+      )}
     </>
   );
 };
