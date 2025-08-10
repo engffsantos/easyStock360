@@ -148,3 +148,6 @@ export const MenuIcon = (props) => (
 export const ChevronRightIcon = (props) => (
   <IconBase {...props} d="M9 5l7 7-7 7" />
 );
+export const RefreshCwIcon = (props) => (
+  <IconBase {...props} d="M23 4v6h-6M1 20v-6h6m15-2a9 9 0 11-3-7.36L23 10M1 14a9 9 0 003 7.36L1 14z" />
+);

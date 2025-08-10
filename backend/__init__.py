@@ -11,6 +11,9 @@ from app.routes.reports import reports_bp
 from app.routes.settings import settings_bp
 import os
 
+from app.routes.sales_payments import sales_payments_bp
+
+
 def create_app():
     app = Flask(__name__)
 
@@ -35,7 +38,7 @@ def create_app():
     app.register_blueprint(financial_bp, url_prefix='/api/financial')
     app.register_blueprint(reports_bp, url_prefix='/api/reports')
     app.register_blueprint(settings_bp, url_prefix='/api/settings')
-
+    app.register_blueprint(sales_payments_bp, url_prefix='/api')
     # Cria as tabelas se não existirem
     with app.app_context():
         db.create_all()

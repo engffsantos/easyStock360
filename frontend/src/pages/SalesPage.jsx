@@ -14,6 +14,30 @@ const formatDate = (dateString) =>
     timeStyle: 'short',
   }).format(new Date(dateString));
 
+function splitAmountsBRL(totalNumber, n) {
+  const total = Math.round(Number(totalNumber || 0) * 100);
+  const base = Math.floor(total / n);
+  const remainder = total % n;
+  const arr = Array.from({ length: n }, (_, i) => base + (i < remainder ? 1 : 0));
+  return arr.map(v => v / 100);
+}
+
+function addMonths(date, months) {
+  const d = new Date(date);
+  const day = d.getDate();
+  d.setMonth(d.getMonth() + months);
+  if (d.getDate() < day) d.setDate(0);
+  return d;
+}
+
+function toInputDate(d) {
+  const dd = new Date(d);
+  const y = dd.getFullYear();
+  const m = String(dd.getMonth() + 1).padStart(2, '0');
+  const day = String(dd.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 const SalesPage = ({ onNavigateToReceipt }) => {
   const [activeTab, setActiveTab] = useState('sales');
 
@@ -25,6 +49,7 @@ const SalesPage = ({ onNavigateToReceipt }) => {
 
   // Conversão
   const [paymentDetails, setPaymentDetails] = useState({ paymentMethod: 'PIX', installments: 1 });
+  const [boletoDates, setBoletoDates] = useState(['']);
   const [quoteToConvert, setQuoteToConvert] = useState(null);
   const [isConverting, setIsConverting] = useState(false);
 
@@ -74,12 +99,37 @@ const SalesPage = ({ onNavigateToReceipt }) => {
     fetchData();
   };
 
-  const handleConvertToSale = async (quoteId, paymentDetails) => {
+  const handleConvertToSale = async (quoteId, paymentDetailsIn) => {
     try {
       setIsConverting(true);
-      await api.convertToSale(quoteId, paymentDetails);
+
+      // Monta payments se for boleto
+      let body = { ...paymentDetailsIn };
+      if (paymentDetailsIn.paymentMethod === 'BOLETO') {
+        const n = Math.max(1, Number(paymentDetailsIn.installments) || 1);
+        if (boletoDates.length !== n || boletoDates.some(d => !d)) {
+          alert('Preencha todas as datas de vencimento das parcelas de boleto.');
+          setIsConverting(false);
+          return;
+        }
+        const totalRef = quotes.find(q => q.id === quoteId)?.total || 0;
+        const amounts = splitAmountsBRL(totalRef, n);
+        body = {
+          ...body,
+          payments: boletoDates.map((d, i) => ({
+            dueDate: new Date(`${d}T00:00:00Z`).toISOString(),
+            amount: amounts[i],
+            paymentMethod: 'BOLETO',
+            status: 'ABERTO',
+          })),
+        };
+      }
+
+      await api.convertToSale(quoteId, body);
       alert('Orçamento convertido com sucesso!');
       setQuoteToConvert(null);
+      setBoletoDates(['']);
+      setPaymentDetails({ paymentMethod: 'PIX', installments: 1 });
       fetchData();
     } catch (err) {
       alert('Erro ao converter orçamento');
@@ -327,7 +377,11 @@ const SalesPage = ({ onNavigateToReceipt }) => {
                   <td className="px-6 py-4 text-sm font-bold text-primary-800">{formatCurrency(quote.total)}</td>
                   <td className="px-6 py-4">
                     <div className="flex gap-2 items-center flex-wrap">
-                      <PrimaryButton className="!py-1 !px-2 text-sm" onClick={() => setQuoteToConvert(quote)}>
+                      <PrimaryButton className="!py-1 !px-2 text-sm" onClick={() => {
+                        setQuoteToConvert(quote);
+                        setPaymentDetails({ paymentMethod: 'PIX', installments: 1 });
+                        setBoletoDates(['']);
+                      }}>
                         <CheckCircleIcon className="w-4 h-4" /> Converter
                       </PrimaryButton>
                       <PrimaryButton className="!py-1 !px-2" onClick={() => onNavigateToReceipt(quote.id)}>
@@ -356,6 +410,30 @@ const SalesPage = ({ onNavigateToReceipt }) => {
     if (loading) return <div className="flex justify-center p-12"><Spinner /></div>;
     if (error) return <div className="text-center text-danger p-12">{error}</div>;
     return activeTab === 'sales' ? renderSalesTable() : renderQuotesTable();
+  };
+
+  // Atualiza a quantidade de campos de boleto ao mudar installments
+  useEffect(() => {
+    if (!quoteToConvert) return;
+    if (paymentDetails.paymentMethod !== 'BOLETO') return;
+    setBoletoDates(prev => {
+      const next = [...prev];
+      const n = Math.max(1, Number(paymentDetails.installments) || 1);
+      if (n > next.length) {
+        while (next.length < n) next.push('');
+      } else if (n < next.length) {
+        next.length = n;
+      }
+      return next;
+    });
+  }, [paymentDetails.installments, paymentDetails.paymentMethod, quoteToConvert]);
+
+  const autofillMonthlyBoletoConv = () => {
+    const today = new Date();
+    const first = addMonths(today, 1);
+    const n = Math.max(1, Number(paymentDetails.installments) || 1);
+    const arr = Array.from({ length: n }, (_, i) => toInputDate(addMonths(first, i)));
+    setBoletoDates(arr);
   };
 
   return (
@@ -444,6 +522,55 @@ const SalesPage = ({ onNavigateToReceipt }) => {
                   />
                 </div>
               </div>
+
+              {paymentDetails.paymentMethod === 'BOLETO' && (
+                <div className="border rounded p-3 bg-white">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <h4 className="font-semibold">Vencimentos do Boleto</h4>
+                    <div className="flex gap-2">
+                      <button
+                        className="px-3 py-2 rounded text-white"
+                        style={{ backgroundColor: 'rgb(var(--color-primary-600))' }}
+                        onClick={autofillMonthlyBoletoConv}
+                        type="button"
+                      >
+                        Preencher mensalmente
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-sm text-base-400 mb-2">
+                    Informe o <strong>vencimento</strong> de cada parcela. Os valores serão distribuídos automaticamente.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {Array.from({ length: Math.max(1, Number(paymentDetails.installments) || 1) }).map((_, i) => (
+                      <div key={i}>
+                        <label className="block text-sm mb-1">Parcela #{i + 1} - Vencimento</label>
+                        <input
+                          type="date"
+                          className="w-full p-2 border rounded"
+                          value={boletoDates[i] || ''}
+                          onChange={(e) => {
+                            setBoletoDates(prev => {
+                              const next = [...prev];
+                              next[i] = e.target.value;
+                              return next;
+                            });
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-3 text-sm">
+                    <p className="font-medium">Distribuição do total por parcela (estimativa):</p>
+                    <ul className="list-disc pl-5">
+                      {splitAmountsBRL(quoteToConvert?.total || 0, Math.max(1, Number(paymentDetails.installments) || 1)).map((v, i) => (
+                        <li key={i}>Parcela #{i + 1}: {formatCurrency(v)}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
 
               <PrimaryButton
                 onClick={() => handleConvertToSale(quoteToConvert.id, paymentDetails)}

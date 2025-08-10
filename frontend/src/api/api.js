@@ -61,6 +61,10 @@ export const api = {
 
   cancelSale: (id) => axios.put(`${BASE_URL}/sales/${id}/cancel`),
 
+  // --- Sales Payments (novo) ---
+  paySalePayment: (paymentId) =>
+    axios.post(`${BASE_URL}/sales/payments/${paymentId}/pay`).then(res => res.data),
+
   // -------------------------
   // Financial
   // -------------------------

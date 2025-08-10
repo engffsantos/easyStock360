@@ -28,12 +28,18 @@ const SecondaryButton = ({ children, onClick, type = 'button', className = '', .
   </button>
 );
 
+const parseISOWithTZ = (s) => {
+  if (!s) return new Date();
+  if (!/Z|[+\-]\d{2}:\d{2}$/.test(s)) return new Date(`${s}Z`);
+  return new Date(s);
+};
+
 const formatCurrency = (value) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value || 0));
 
 const formatDate = (dateString) =>
   dateString
-    ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(new Date(dateString))
+    ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(parseISOWithTZ(dateString))
     : '-';
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -112,6 +118,66 @@ const ExpenseForm = ({ onSave, onClose, isSaving }) => {
   );
 };
 
+const ReceivableForm = ({ onSave, onClose, isSaving }) => {
+  const [formData, setFormData] = useState({
+    description: '',
+    amount: 0,
+    dueDate: '',
+    paymentMethod: 'PIX',
+  });
+  const [errors, setErrors] = useState({});
+
+  const validate = () => {
+    const newErrors = {};
+    if (!formData.description.trim()) newErrors.description = 'Descrição é obrigatória.';
+    if (formData.amount <= 0) newErrors.amount = 'Valor deve ser positivo.';
+    if (!formData.dueDate) newErrors.dueDate = 'Data de vencimento é obrigatória.';
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (validate()) {
+      onSave({ ...formData, type: 'RECEITA' });
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <Input id="description_r" label="Descrição da Receita" value={formData.description} onChange={(e) => setFormData((p) => ({ ...p, description: e.target.value }))} required />
+      {errors.description && <p className="text-danger text-sm">{errors.description}</p>}
+
+      <Input id="amount_r" label="Valor (R$)" type="number" step="0.01" value={formData.amount} onChange={(e) => setFormData((p) => ({ ...p, amount: parseFloat(e.target.value) || 0 }))} required />
+      {errors.amount && <p className="text-danger text-sm">{errors.amount}</p>}
+
+      <Input id="dueDate_r" label="Data de Vencimento" type="date" value={formData.dueDate} onChange={(e) => setFormData((p) => ({ ...p, dueDate: e.target.value }))} required />
+      {errors.dueDate && <p className="text-danger text-sm">{errors.dueDate}</p>}
+
+      <div>
+        <label htmlFor="paymentMethod_r" className="block text-sm font-medium mb-1">Forma de Pagamento</label>
+        <select
+          id="paymentMethod_r"
+          value={formData.paymentMethod}
+          onChange={(e) => setFormData((p) => ({ ...p, paymentMethod: e.target.value }))}
+          className="w-full bg-white border border-base-200 rounded-md shadow-sm p-2 focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-base-400"
+        >
+          {['PIX', 'DINHEIRO', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'BOLETO'].map((method) => (
+            <option key={method} value={method}>
+              {method.replace('_', ' ')}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex justify-end gap-3 pt-4">
+        <SecondaryButton onClick={onClose} disabled={isSaving}>Cancelar</SecondaryButton>
+        <PrimaryButton type="submit" disabled={isSaving}>{isSaving ? 'Salvando...' : 'Salvar Receita'}</PrimaryButton>
+      </div>
+    </form>
+  );
+};
+
 const METHOD_LABEL = {
   PIX: 'PIX',
   DINHEIRO: 'Dinheiro',
@@ -124,7 +190,7 @@ const METHOD_LABEL = {
 function inferStatus(rawStatus, dueDate) {
   if (rawStatus === 'PAGO') return 'PAGO';
   if (!dueDate) return rawStatus || 'PENDENTE';
-  const d = new Date(dueDate);
+  const d = parseISOWithTZ(dueDate);
   const now = new Date(`${todayISO()}T23:59:59`);
   if (rawStatus && rawStatus !== 'PENDENTE') return rawStatus;
   return d < now ? 'VENCIDO' : 'PENDENTE';
@@ -138,7 +204,8 @@ function mapSalesToReceivables(sales) {
     const fallbackMethod = s.paymentMethod || 'PIX';
 
     if (Array.isArray(s.payments) && s.payments.length > 0) {
-      s.payments.forEach((p, idx) => {
+      const ordered = [...s.payments].sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+      ordered.forEach((p, idx) => {
         receivables.push({
           id: p.id || `sale-${s.id}-p${idx + 1}`,
           description: `${baseDesc} (Parcela ${idx + 1})`,
@@ -151,10 +218,11 @@ function mapSalesToReceivables(sales) {
           __source: 'sale_payment',
           __saleId: s.id,
           __installment: idx + 1,
+          __paymentId: p.id || null, // <- id real da parcela, se existir
         });
       });
     } else {
-      // Fallback: uma linha única, considerada paga (mantém comportamento anterior)
+      // Fallback: uma linha única
       receivables.push({
         id: `venda-${s.id}`,
         description: `Venda para ${s.customerName || 'Consumidor Final'}`,
@@ -172,7 +240,7 @@ function mapSalesToReceivables(sales) {
   return receivables;
 }
 
-// Exporta CSV simples (UTF-8, separador vírgula)
+// Exporta CSV simples (agora respeita o tipo da aba)
 function exportCSV(rows, filename = 'lancamentos.csv') {
   const headers = ['Tipo', 'Descrição', 'Vencimento', 'Valor', 'Status', 'Forma', 'Origem', 'Referência'];
   const lines = [
@@ -184,7 +252,7 @@ function exportCSV(rows, filename = 'lancamentos.csv') {
         r.type,
         (r.description || '').replace(/,/g, ' '),
         formatDate(r.dueDate),
-        String(Number(r.amount || 0).toFixed(2)).replace('.', ','), // pt-BR friendly
+        String(Number(r.amount || 0).toFixed(2)).replace('.', ','),
         r.status || '',
         METHOD_LABEL[r.paymentMethod] || r.paymentMethod || '',
         origem,
@@ -208,10 +276,13 @@ const FinancialPage = () => {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Modais
+  const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
+  const [isReceivableModalOpen, setIsReceivableModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Filtros (aplicados por aba de lista)
+  // Filtros
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -228,17 +299,14 @@ const FinancialPage = () => {
         api.getSales(),
       ]);
 
-      // Manual já vem com id, type, status etc.
       const normalizedManual = (manualEntries || []).map((e) => ({
         ...e,
         amount: Number(e.amount || 0),
         __source: 'manual',
       }));
 
-      // Receitas de vendas (parcelas separadas quando existirem)
       const salesReceivables = mapSalesToReceivables(sales || []);
 
-      // Junta e ordena por vencimento desc
       const all = [...normalizedManual, ...salesReceivables].sort((a, b) => {
         const da = new Date(a.dueDate || a.createdAt || 0);
         const db = new Date(b.dueDate || b.createdAt || 0);
@@ -267,6 +335,15 @@ const FinancialPage = () => {
     }
   };
 
+  const handleReceiveSalePayment = async (paymentId) => {
+    try {
+      await api.paySalePayment(paymentId);
+      fetchData();
+    } catch (e) {
+      alert(`Falha ao receber parcela da venda: ${e?.response?.data?.error || e.message}`);
+    }
+  };
+
   const handleDeleteExpense = async (id) => {
     if (window.confirm('Tem certeza que deseja excluir esta despesa?')) {
       try {
@@ -282,16 +359,28 @@ const FinancialPage = () => {
     setIsSaving(true);
     try {
       await api.addFinancialEntry(data);
-      setIsModalOpen(false);
+      setIsExpenseModalOpen(false);
       fetchData();
     } catch (e) {
       alert(`Falha ao salvar despesa: ${e}`);
+    } finally {
+           setIsSaving(false);
+    }
+  };
+
+  const handleSaveReceivable = async (data) => {
+    setIsSaving(true);
+    try {
+      await api.addFinancialEntry(data);
+      setIsReceivableModalOpen(false);
+      fetchData();
+    } catch (e) {
+      alert(`Falha ao salvar receita: ${e}`);
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Helpers UI
   const statusBadgeClass = (st) => {
     const status = st || 'PENDENTE';
     const map = {
@@ -302,26 +391,21 @@ const FinancialPage = () => {
     return `px-2 py-1 rounded ${map[status] || map.PENDENTE}`;
   };
 
-  // Filtro comum para tabelas
   const filterData = useCallback(
     (type) => {
       const term = search.trim().toLowerCase();
       return entries.filter((e) => {
         if (e.type !== type) return false;
 
-        // Texto
         const okText = !term || (e.description || '').toLowerCase().includes(term);
 
-        // Período (baseado em dueDate)
         const d = new Date(e.dueDate || e.createdAt);
         const okFrom = !dateFrom || d >= new Date(`${dateFrom}T00:00:00`);
         const okTo = !dateTo || d <= new Date(`${dateTo}T23:59:59`);
 
-        // Status (com inferência p/ vencidos quando não pago)
         const st = inferStatus(e.status, e.dueDate);
         const okStatus = statusFilter === 'ALL' || st === statusFilter;
 
-        // Método
         const okMethod = methodFilter === 'ALL' || (e.paymentMethod || 'OUTRO') === methodFilter;
 
         return okText && okFrom && okTo && okStatus && okMethod;
@@ -330,7 +414,7 @@ const FinancialPage = () => {
     [entries, search, dateFrom, dateTo, statusFilter, methodFilter]
   );
 
-  // --------- OVERVIEW ----------
+  // OVERVIEW
   const renderOverview = () => {
     const totalReceber = entries
       .filter((e) => e.type === 'RECEITA' && inferStatus(e.status, e.dueDate) !== 'PAGO')
@@ -356,171 +440,246 @@ const FinancialPage = () => {
     const vencidasPagar = entries
       .filter((e) => e.type === 'DESPESA' && inferStatus(e.status, e.dueDate) === 'VENCIDO').length;
 
+    const exportAllFiltered = () => {
+      // Exporta tudo que passar nos filtros atuais (receita + despesa)
+      const term = search.trim().toLowerCase();
+      const allVisible = entries.filter((e) => {
+        const okText = !term || (e.description || '').toLowerCase().includes(term);
+        const d = new Date(e.dueDate || e.createdAt);
+        const okFrom = !dateFrom || d >= new Date(`${dateFrom}T00:00:00`);
+        const okTo = !dateTo || d <= new Date(`${dateTo}T23:59:59`);
+        const st = inferStatus(e.status, e.dueDate);
+        const okStatus = statusFilter === 'ALL' || st === statusFilter;
+        const okMethod = methodFilter === 'ALL' || (e.paymentMethod || 'OUTRO') === methodFilter;
+        return okText && okFrom && okTo && okStatus && okMethod;
+      });
+      exportCSV(allVisible, 'financeiro_geral.csv');
+    };
+
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="Saldo Atual (Realizado)" value={formatCurrency(saldo)} className={saldo >= 0 ? 'bg-primary-50' : 'bg-red-50'} />
-        <StatCard title="Total a Receber" value={formatCurrency(totalReceber)} />
-        <StatCard title="Total a Pagar" value={formatCurrency(totalPagar)} />
-        <Card className="text-center p-4 bg-danger/10">
-          <h3 className="text-base font-semibold text-danger">Contas Vencidas</h3>
-          <p className="text-2xl font-bold text-danger mt-2">{vencidasReceber + vencidasPagar}</p>
-          <p className="text-sm text-red-700">{vencidasPagar} a pagar, {vencidasReceber} a receber</p>
-        </Card>
-      </div>
+      <>
+        <div className="mb-4 flex flex-wrap gap-2 justify-end">
+          <SecondaryButton onClick={() => setIsReceivableModalOpen(true)}><PlusIcon /> Nova Receita</SecondaryButton>
+          <SecondaryButton onClick={() => setIsExpenseModalOpen(true)}><PlusIcon /> Nova Despesa</SecondaryButton>
+          <PrimaryButton onClick={exportAllFiltered}>Exportar CSV</PrimaryButton>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <StatCard title="Saldo Atual (Realizado)" value={formatCurrency(saldo)} className={saldo >= 0 ? 'bg-primary-50' : 'bg-red-50'} />
+          <StatCard title="Total a Receber" value={formatCurrency(totalReceber)} />
+          <StatCard title="Total a Pagar" value={formatCurrency(totalPagar)} />
+          <Card className="text-center p-4 bg-danger/10">
+            <h3 className="text-base font-semibold text-danger">Contas Vencidas</h3>
+            <p className="text-2xl font-bold text-danger mt-2">{vencidasReceber + vencidasPagar}</p>
+            <p className="text-sm text-red-700">{vencidasPagar} a pagar, {vencidasReceber} a receber</p>
+          </Card>
+        </div>
+      </>
     );
   };
 
-  // --------- TABELA ----------
-  const Table = ({ data, type }) => {
-    return (
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-base-200">
-          <thead className="bg-white">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs uppercase">Descrição</th>
-              <th className="px-4 py-3 text-left text-xs uppercase">Vencimento</th>
-              <th className="px-4 py-3 text-left text-xs uppercase">Valor</th>
-              <th className="px-4 py-3 text-left text-xs uppercase">Forma</th>
-              <th className="px-4 py-3 text-left text-xs uppercase">Origem</th>
-              <th className="px-4 py-3 text-left text-xs uppercase">Status</th>
-              <th className="px-4 py-3 text-left text-xs uppercase">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.length > 0 ? (
-              data.map((entry) => {
-                const origem = entry.__source === 'sale_payment'
-                  ? 'Venda (parcela)'
-                  : entry.__source === 'sale_total'
-                    ? 'Venda'
-                    : 'Manual';
-                const status = inferStatus(entry.status, entry.dueDate);
-                const canPay = entry.type === 'DESPESA' && status !== 'PAGO' && entry.__source === 'manual';
-                const canDelete = entry.type === 'DESPESA' && status !== 'PAGO' && entry.__source === 'manual';
-                return (
-                  <tr key={entry.id} className="border-b">
-                    <td className="px-4 py-2">{entry.description}</td>
-                    <td className="px-4 py-2">{formatDate(entry.dueDate)}</td>
-                    <td className="px-4 py-2 font-medium">{formatCurrency(entry.amount)}</td>
-                    <td className="px-4 py-2">{METHOD_LABEL[entry.paymentMethod] || entry.paymentMethod || '-'}</td>
-                    <td className="px-4 py-2">{origem}</td>
-                    <td className="px-4 py-2"><span className={statusBadgeClass(status)}>{status}</span></td>
-                    <td className="px-4 py-2">
-                      <div className="flex gap-2 items-center">
-                        {canPay && (
-                          <PrimaryButton onClick={() => handleMarkAsPaid(entry.id)}>
-                            <DollarSignIcon className="w-4 h-4" /> Pagar
-                          </PrimaryButton>
-                        )}
-                        {canDelete && (
-                          <button onClick={() => handleDeleteExpense(entry.id)} className="text-danger">
-                            <TrashIcon />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            ) : (
-              <tr><td colSpan="7" className="text-center py-12">Nenhum lançamento encontrado.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    );
-  };
+  // Tabela
+  const Table = ({ data, type }) => (
+    <div className="overflow-x-auto">
+      <table className="min-w-full divide-y divide-base-200">
+        <thead className="bg-white">
+          <tr>
+            <th className="px-4 py-3 text-left text-xs uppercase">Descrição</th>
+            <th className="px-4 py-3 text-left text-xs uppercase">Vencimento</th>
+            <th className="px-4 py-3 text-left text-xs uppercase">Valor</th>
+            <th className="px-4 py-3 text-left text-xs uppercase">Forma</th>
+            <th className="px-4 py-3 text-left text-xs uppercase">Origem</th>
+            <th className="px-4 py-3 text-left text-xs uppercase">Status</th>
+            <th className="px-4 py-3 text-left text-xs uppercase">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.length > 0 ? (
+            data.map((entry) => {
+              const origem = entry.__source === 'sale_payment'
+                ? 'Venda (parcela)'
+                : entry.__source === 'sale_total'
+                  ? 'Venda'
+                  : 'Manual';
+              const status = inferStatus(entry.status, entry.dueDate);
 
-  // --------- LISTAS COM FILTROS ----------
-  const FiltersBar = ({ onExport }) => (
-    <Card className="!p-4 mb-4">
-      <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
-        <div className="md:col-span-2">
-          <Input
-            id="search"
-            label="Buscar (descrição)"
-            placeholder="Ex.: água, aluguel, parcela 2..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="text-sm block mb-1">Data inicial</label>
-          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="px-3 py-2 border border-base-200 rounded-xl text-sm w-full" />
-        </div>
-        <div>
-          <label className="text-sm block mb-1">Data final</label>
-          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="px-3 py-2 border border-base-200 rounded-xl text-sm w-full" />
-        </div>
-        <div>
-          <label className="text-sm block mb-1">Status</label>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-2 border border-base-200 rounded-xl text-sm w-full">
-            <option value="ALL">Todos</option>
-            <option value="PENDENTE">Pendente</option>
-            <option value="VENCIDO">Vencido</option>
-            <option value="PAGO">Pago</option>
-          </select>
-        </div>
-        <div>
-          <label className="text-sm block mb-1">Forma</label>
-          <select value={methodFilter} onChange={(e) => setMethodFilter(e.target.value)} className="px-3 py-2 border border-base-200 rounded-xl text-sm w-full">
-            <option value="ALL">Todas</option>
-            <option value="PIX">PIX</option>
-            <option value="DINHEIRO">Dinheiro</option>
-            <option value="CARTAO_CREDITO">Cartão de Crédito</option>
-            <option value="CARTAO_DEBITO">Cartão de Débito</option>
-            <option value="BOLETO">Boleto</option>
-          </select>
-        </div>
-      </div>
-      <div className="mt-3 flex flex-wrap gap-2 justify-between">
-        <div className="flex gap-2">
-          <TinyStat label="Qtd. filtrada" value={
-            entries.filter((e) => {
-              // só para exibir contagem rápida sem separar por tipo
-              const term = search.trim().toLowerCase();
-              const okText = !term || (e.description || '').toLowerCase().includes(term);
-              const d = new Date(e.dueDate || e.createdAt);
-              const okFrom = !dateFrom || d >= new Date(`${dateFrom}T00:00:00`);
-              const okTo = !dateTo || d <= new Date(`${dateTo}T23:59:59`);
-              const st = inferStatus(e.status, e.dueDate);
-              const okStatus = statusFilter === 'ALL' || st === statusFilter;
-              const okMethod = methodFilter === 'ALL' || (e.paymentMethod || 'OUTRO') === methodFilter;
-              return okText && okFrom && okTo && okStatus && okMethod;
-            }).length
-          } />
-          <TinyStat label="Soma filtrada" value={
-            formatCurrency(entries.reduce((sum, e) => {
-              const term = search.trim().toLowerCase();
-              const okText = !term || (e.description || '').toLowerCase().includes(term);
-              const d = new Date(e.dueDate || e.createdAt);
-              const okFrom = !dateFrom || d >= new Date(`${dateFrom}T00:00:00`);
-              const okTo = !dateTo || d <= new Date(`${dateTo}T23:59:59`);
-              const st = inferStatus(e.status, e.dueDate);
-              const okStatus = statusFilter === 'ALL' || st === statusFilter;
-              const okMethod = methodFilter === 'ALL' || (e.paymentMethod || 'OUTRO') === methodFilter;
-              return okText && okFrom && okTo && okStatus && okMethod ? sum + Number(e.amount || 0) : sum;
-            }, 0))
-          } />
-        </div>
-        <div className="flex gap-2">
-          <SecondaryButton onClick={() => { setSearch(''); setDateFrom(''); setDateTo(''); setStatusFilter('ALL'); setMethodFilter('ALL'); }}>
-            Limpar Filtros
-          </SecondaryButton>
-          <PrimaryButton onClick={onExport}>
-            Exportar CSV
-          </PrimaryButton>
-        </div>
-      </div>
-    </Card>
+              const isManual = entry.__source === 'manual';
+              const isSalePayment = entry.__source === 'sale_payment';
+              const hasRealPaymentId = Boolean(entry.__paymentId); // veio do backend
+
+              // Receber:
+              // - manual (usa /financial/<id>/pay) OU
+              // - parcela de venda com id real (usa /sales/payments/<paymentId>/pay)
+              const canReceiveManual = entry.type === 'RECEITA' && status !== 'PAGO' && isManual;
+              const canReceiveSale = entry.type === 'RECEITA' && status !== 'PAGO' && isSalePayment && hasRealPaymentId;
+
+              const canPay = entry.type === 'DESPESA' && status !== 'PAGO' && isManual;
+              const canDelete = entry.type === 'DESPESA' && status !== 'PAGO' && isManual;
+
+              return (
+                <tr key={entry.id} className="border-b">
+                  <td className="px-4 py-2">{entry.description}</td>
+                  <td className="px-4 py-2">{formatDate(entry.dueDate)}</td>
+                  <td className="px-4 py-2 font-medium">{formatCurrency(entry.amount)}</td>
+                  <td className="px-4 py-2">{METHOD_LABEL[entry.paymentMethod] || entry.paymentMethod || '-'}</td>
+                  <td className="px-4 py-2">{origem}</td>
+                  <td className="px-4 py-2"><span className={statusBadgeClass(status)}>{status}</span></td>
+                  <td className="px-4 py-2">
+                    <div className="flex gap-2 items-center">
+                      {canReceiveManual && (
+                        <PrimaryButton onClick={() => handleMarkAsPaid(entry.id)}>
+                          <DollarSignIcon className="w-4 h-4" /> Receber
+                        </PrimaryButton>
+                      )}
+                      {canReceiveSale && (
+                        <PrimaryButton onClick={() => handleReceiveSalePayment(entry.__paymentId)}>
+                          <DollarSignIcon className="w-4 h-4" /> Receber
+                        </PrimaryButton>
+                      )}
+                      {canPay && (
+                        <PrimaryButton onClick={() => handleMarkAsPaid(entry.id)}>
+                          <DollarSignIcon className="w-4 h-4" /> Pagar
+                        </PrimaryButton>
+                      )}
+                      {canDelete && (
+                        <button onClick={() => handleDeleteExpense(entry.id)} className="text-danger" title="Excluir">
+                          <TrashIcon />
+                        </button>
+                      )}
+                      {/* Se for parcela de venda sem id (ex.: dados antigos), mostramos aviso */}
+                      {entry.type === 'RECEITA' && isSalePayment && !hasRealPaymentId && status !== 'PAGO' && (
+                        <span className="text-xs text-base-300" title="Esta parcela não possui ID no backend; gere novamente a venda ou atualize o backend para persistir IDs das parcelas.">
+                          (parcela sem ID no backend)
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })
+          ) : (
+            <tr><td colSpan="7" className="text-center py-12">Nenhum lançamento encontrado.</td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 
-  // --------- CONTEÚDO POR ABA ----------
+  // Filtros
+  const FiltersBar = ({ currentType }) => {
+    const filteredCount = useMemo(() => {
+      const term = search.trim().toLowerCase();
+      return entries.filter((e) => {
+        if (currentType && e.type !== currentType) return false;
+        const okText = !term || (e.description || '').toLowerCase().includes(term);
+        const d = new Date(e.dueDate || e.createdAt);
+        const okFrom = !dateFrom || d >= new Date(`${dateFrom}T00:00:00`);
+        const okTo = !dateTo || d <= new Date(`${dateTo}T23:59:59`);
+        const st = inferStatus(e.status, e.dueDate);
+        const okStatus = statusFilter === 'ALL' || st === statusFilter;
+        const okMethod = methodFilter === 'ALL' || (e.paymentMethod || 'OUTRO') === methodFilter;
+        return okText && okFrom && okTo && okStatus && okMethod;
+      }).length;
+    }, [entries, search, dateFrom, dateTo, statusFilter, methodFilter, currentType]);
+
+    const filteredSum = useMemo(() => {
+      const term = search.trim().toLowerCase();
+      return entries.reduce((sum, e) => {
+        if (currentType && e.type !== currentType) return sum;
+        const okText = !term || (e.description || '').toLowerCase().includes(term);
+        const d = new Date(e.dueDate || e.createdAt);
+        const okFrom = !dateFrom || d >= new Date(`${dateFrom}T00:00:00`);
+        const okTo = !dateTo || d <= new Date(`${dateTo}T23:59:59`);
+        const st = inferStatus(e.status, e.dueDate);
+        const okStatus = statusFilter === 'ALL' || st === statusFilter;
+        const okMethod = methodFilter === 'ALL' || (e.paymentMethod || 'OUTRO') === methodFilter;
+        return okText && okFrom && okTo && okStatus && okMethod ? sum + Number(e.amount || 0) : sum;
+      }, 0);
+    }, [entries, search, dateFrom, dateTo, statusFilter, methodFilter, currentType]);
+
+    const doExport = () => {
+      const term = search.trim().toLowerCase();
+      const rows = entries.filter((e) => {
+        if (currentType && e.type !== currentType) return false;
+        const okText = !term || (e.description || '').toLowerCase().includes(term);
+        const d = new Date(e.dueDate || e.createdAt);
+        const okFrom = !dateFrom || d >= new Date(`${dateFrom}T00:00:00`);
+        const okTo = !dateTo || d <= new Date(`${dateTo}T23:59:59`);
+        const st = inferStatus(e.status, e.dueDate);
+        const okStatus = statusFilter === 'ALL' || st === statusFilter;
+        const okMethod = methodFilter === 'ALL' || (e.paymentMethod || 'OUTRO') === methodFilter;
+        return okText && okFrom && okTo && okStatus && okMethod;
+      });
+      exportCSV(rows, currentType === 'RECEITA' ? 'receitas.csv' : currentType === 'DESPESA' ? 'despesas.csv' : 'lancamentos.csv');
+    };
+
+    return (
+      <Card className="!p-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+          <div className="md:col-span-2">
+            <Input
+              id="search"
+              label="Buscar (descrição)"
+              placeholder="Ex.: água, aluguel, parcela 2..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="text-sm block mb-1">Data inicial</label>
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="px-3 py-2 border border-base-200 rounded-xl text-sm w-full" />
+          </div>
+          <div>
+            <label className="text-sm block mb-1">Data final</label>
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="px-3 py-2 border border-base-200 rounded-xl text-sm w-full" />
+          </div>
+          <div>
+            <label className="text-sm block mb-1">Status</label>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-2 border border-base-200 rounded-xl text-sm w-full">
+              <option value="ALL">Todos</option>
+              <option value="PENDENTE">Pendente</option>
+              <option value="VENCIDO">Vencido</option>
+              <option value="PAGO">Pago</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-sm block mb-1">Forma</label>
+            <select value={methodFilter} onChange={(e) => setMethodFilter(e.target.value)} className="px-3 py-2 border border-base-200 rounded-xl text-sm w-full">
+              <option value="ALL">Todas</option>
+              <option value="PIX">PIX</option>
+              <option value="DINHEIRO">Dinheiro</option>
+              <option value="CARTAO_CREDITO">Cartão de Crédito</option>
+              <option value="CARTAO_DEBITO">Cartão de Débito</option>
+              <option value="BOLETO">Boleto</option>
+            </select>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2 justify-between">
+          <div className="flex gap-2">
+            <TinyStat label="Qtd. filtrada" value={filteredCount} />
+            <TinyStat label="Soma filtrada" value={formatCurrency(filteredSum)} />
+          </div>
+          <div className="flex gap-2">
+            <SecondaryButton onClick={() => { setSearch(''); setDateFrom(''); setDateTo(''); setStatusFilter('ALL'); setMethodFilter('ALL'); }}>
+              Limpar Filtros
+            </SecondaryButton>
+            <PrimaryButton onClick={doExport}>Exportar CSV</PrimaryButton>
+          </div>
+        </div>
+      </Card>
+    );
+  };
+
   const renderReceivable = () => {
     const data = filterData('RECEITA');
     return (
       <div className="space-y-4">
-        <FiltersBar onExport={() => exportCSV(data, 'receitas.csv')} />
+        <div className="flex justify-between items-center">
+          <FiltersBar currentType="RECEITA" />
+        </div>
+        <div className="text-right -mt-2">
+          <PrimaryButton onClick={() => setIsReceivableModalOpen(true)}><PlusIcon /> Nova Receita</PrimaryButton>
+        </div>
         <Card><Table data={data} type="RECEITA" /></Card>
       </div>
     );
@@ -531,11 +690,11 @@ const FinancialPage = () => {
     return (
       <div className="space-y-6">
         <div className="flex justify-between">
-          <FiltersBar onExport={() => exportCSV(data, 'despesas.csv')} />
-          <div className="hidden" /> {/* espaçador */}
+          <FiltersBar currentType="DESPESA" />
+          <div className="hidden" />
         </div>
         <div className="text-right -mt-2">
-          <PrimaryButton onClick={() => setIsModalOpen(true)}><PlusIcon /> Nova Despesa</PrimaryButton>
+          <PrimaryButton onClick={() => setIsExpenseModalOpen(true)}><PlusIcon /> Nova Despesa</PrimaryButton>
         </div>
         <Card><Table data={data} type="DESPESA" /></Card>
       </div>
@@ -571,8 +730,14 @@ const FinancialPage = () => {
 
       {renderContent()}
 
-      <ModalWrapper isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Adicionar Nova Despesa">
-        <ExpenseForm onSave={handleSaveExpense} onClose={() => setIsModalOpen(false)} isSaving={isSaving} />
+      {/* Modal: Nova Despesa */}
+      <ModalWrapper isOpen={isExpenseModalOpen} onClose={() => setIsExpenseModalOpen(false)} title="Adicionar Nova Despesa">
+        <ExpenseForm onSave={handleSaveExpense} onClose={() => setIsExpenseModalOpen(false)} isSaving={isSaving} />
+      </ModalWrapper>
+
+      {/* Modal: Nova Receita */}
+      <ModalWrapper isOpen={isReceivableModalOpen} onClose={() => setIsReceivableModalOpen(false)} title="Adicionar Nova Receita">
+        <ReceivableForm onSave={handleSaveReceivable} onClose={() => setIsReceivableModalOpen(false)} isSaving={isSaving} />
       </ModalWrapper>
     </>
   );

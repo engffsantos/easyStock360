@@ -3,14 +3,21 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { api } from '../api/api';
 import { Spinner } from '../components/common';
 
+const parseISOWithTZ = (s) => {
+  if (!s) return new Date();
+  // Se não houver info de timezone, assume UTC para evitar "adiantar/atrasar" local
+  if (!/Z|[+\-]\d{2}:\d{2}$/.test(s)) return new Date(`${s}Z`);
+  return new Date(s);
+};
+
 const formatCurrency = (value) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value || 0));
 
-const formatDateTime = (dateString) =>
-  new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(dateString));
+const formatDate = (dateString) =>
+  new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(parseISOWithTZ(dateString));
 
 const formatOnlyDate = (dateString) =>
-  new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(new Date(dateString));
+  new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(parseISOWithTZ(dateString));
 
 const PAYMENT_LABEL = {
   PIX: 'PIX',
@@ -26,7 +33,7 @@ const ReceiptPage = ({ transactionId, onBack }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Carrega transação + empresa
+  // Carrega dados da transação e empresa
   useEffect(() => {
     const fetchData = async () => {
       if (!transactionId) {
@@ -34,11 +41,10 @@ const ReceiptPage = ({ transactionId, onBack }) => {
         setLoading(false);
         return;
       }
+
       try {
-        const [tx, info] = await Promise.all([
-          api.getTransactionById(transactionId),
-          api.getCompanyInfo(),
-        ]);
+        const tx = await api.getTransactionById(transactionId);
+        const info = await api.getCompanyInfo();
         setTransaction(tx);
         setCompanyInfo(info);
       } catch (err) {
@@ -48,21 +54,22 @@ const ReceiptPage = ({ transactionId, onBack }) => {
         setLoading(false);
       }
     };
+
     fetchData();
   }, [transactionId]);
 
   const isQuote = transaction?.status === 'QUOTE';
 
-  // Rótulo e valor do desconto (apenas exibição)
+  // Rótulo do desconto
   const discountLabel = useMemo(() => {
     if (!transaction) return 'Desconto';
     const { discountType, discountValue } = transaction;
     if (!discountType || !discountValue) return 'Desconto';
-    return discountType === 'PERCENT'
-      ? `Desconto (${Number(discountValue)}%)`
-      : 'Desconto (R$)';
+    if (discountType === 'PERCENT') return `Desconto (${Number(discountValue)}%)`;
+    return 'Desconto (R$)';
   }, [transaction]);
 
+  // Valor de desconto calculado (somente exibição)
   const computedDiscountValue = useMemo(() => {
     if (!transaction) return 0;
     const { discountType, discountValue, subtotal } = transaction;
@@ -71,10 +78,10 @@ const ReceiptPage = ({ transactionId, onBack }) => {
       const perc = Math.max(0, Math.min(Number(discountValue) || 0, 100));
       return Math.min((Number(subtotal) || 0) * (perc / 100), Number(subtotal) || 0);
     }
-    return Math.min(Number(discountValue) || 0, Number(subtotal) || 0);
+    return Math.min(Number(discountValue) || 0, Number(transaction.subtotal) || 0);
   }, [transaction]);
 
-  // Forma de pagamento (venda)
+  // Forma de pagamento (VENDA)
   const paymentInfo = useMemo(() => {
     if (!transaction || isQuote) return null;
     const method =
@@ -92,10 +99,9 @@ const ReceiptPage = ({ transactionId, onBack }) => {
     return { method, installments };
   }, [transaction, isQuote]);
 
-  // Texto de condições / forma de pagamento
+  // Texto dinâmico pagamento/condições
   const paymentConditions = useMemo(() => {
     if (!transaction) return null;
-
     if (!isQuote) {
       if (paymentInfo?.method) {
         const label = PAYMENT_LABEL[paymentInfo.method] || paymentInfo.method;
@@ -103,35 +109,33 @@ const ReceiptPage = ({ transactionId, onBack }) => {
           ? `Pagamento: ${label} em ${paymentInfo.installments}×.`
           : `Pagamento: ${label}.`;
       }
-      return 'Pagamento conforme condições acordadas no ato da venda.';
+      return `Pagamento conforme condições acordadas no ato da venda.`;
     }
 
-    // Para orçamento: lista das formas aceitas (pode vir de Settings)
+    // ORÇAMENTO
     const notes = companyInfo?.paymentsNotes;
-    return (
-      notes ||
-      'Formas aceitas: PIX, débito, crédito (em até 3× sem juros) e boleto (PJ). Desconto de 5% para pagamento à vista no PIX.'
-    );
+    return notes || `Formas aceitas: PIX, débito, crédito (em até 3× sem juros) e boleto (PJ). Desconto de 5% para pagamento à vista no PIX.`;
   }, [transaction, isQuote, companyInfo, paymentInfo]);
 
   if (loading) return <div className="flex justify-center py-12"><Spinner /></div>;
   if (error || !transaction) return <div className="text-center text-danger p-6">{error || 'Documento não encontrado.'}</div>;
 
+  // Soma das parcelas (se existirem)
+  const paymentsTotal = Array.isArray(transaction.payments) && transaction.payments.length > 0
+    ? transaction.payments.reduce((a, p) => a + Number(p.amount || 0), 0)
+    : null;
+
   return (
     <div className="max-w-4xl mx-auto bg-white p-8 shadow print:shadow-none print:p-0">
-      {/* CSS de impressão reforçado para evitar página em branco e garantir contraste */}
-      <style>
-        {`
-          @page { margin: 14mm; }
-          @media print {
-            * { color: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            img { max-width: 100% !important; }
-            .no-print { display: none !important; }
-            .avoid-break { break-inside: avoid; page-break-inside: avoid; }
-            .table-rows tr { break-inside: avoid; page-break-inside: avoid; }
-          }
-        `}
-      </style>
+      <style>{`
+        @page { margin: 14mm; }
+        @media print {
+          .no-print { display: none !important; }
+          .avoid-break { break-inside: avoid; page-break-inside: avoid; }
+          .table-rows tr { break-inside: avoid; page-break-inside: avoid; }
+          .print-border { border-color: #000 !important; }
+        }
+      `}</style>
 
       {/* Cabeçalho */}
       <div className="border-b-2 border-gray-200 pb-4 mb-4 flex items-start justify-between gap-6">
@@ -139,14 +143,14 @@ const ReceiptPage = ({ transactionId, onBack }) => {
           <h1 className="text-2xl font-bold text-gray-800">
             {isQuote ? 'ORÇAMENTO' : 'RECIBO DE VENDA'}
           </h1>
-          <p className="text-sm text-gray-700">
+          <p className="text-sm text-gray-600">
             Número: <strong>{transaction.id}</strong>
           </p>
-          <p className="text-sm text-gray-700">
-            Emissão: <strong>{formatDateTime(transaction.createdAt)}</strong>
+          <p className="text-sm text-gray-600">
+            Emissão: <strong>{formatDate(transaction.createdAt)}</strong>
           </p>
           {isQuote && (
-            <p className="text-sm text-gray-700">
+            <p className="text-sm text-gray-600">
               {transaction.validUntil
                 ? <>Válido até: <strong>{formatOnlyDate(transaction.validUntil)}</strong></>
                 : <>Válido por <strong>10 dias</strong> a partir da emissão.</>}
@@ -158,25 +162,19 @@ const ReceiptPage = ({ transactionId, onBack }) => {
         {companyInfo && (
           <div className="flex items-start gap-4">
             {companyInfo.logoBase64 && (
-              <img
-                src={companyInfo.logoBase64}
-                alt="Logo da empresa"
-                className="w-24 h-auto object-contain"
-              />
+              <img src={companyInfo.logoBase64} alt="Logo da empresa" className="w-24 h-auto object-contain" />
             )}
-            <div className="text-sm text-gray-800">
+            <div className="text-sm text-gray-700">
               <p className="font-semibold">{companyInfo.name}</p>
               <p className="leading-tight">{companyInfo.address}</p>
               <p className="leading-tight">{companyInfo.phone}</p>
               <p className="leading-tight">{companyInfo.email}</p>
               <p className="leading-tight">CNPJ: {companyInfo.cnpj}</p>
-              {Array.isArray(companyInfo.socials) && companyInfo.socials.length > 0 && (
+              {Array.isArray(companyInfo.companySocials) && companyInfo.companySocials.length > 0 && (
                 <p className="leading-tight">
-                  Redes:{' '}
-                  {companyInfo.socials.map((s, idx) => (
+                  Redes: {companyInfo.companySocials.map((s, idx) => (
                     <span key={idx}>
-                      {s}
-                      {idx < companyInfo.socials.length - 1 ? ' • ' : ''}
+                      {s}{idx < companyInfo.companySocials.length - 1 ? ' • ' : ''}
                     </span>
                   ))}
                 </p>
@@ -186,7 +184,7 @@ const ReceiptPage = ({ transactionId, onBack }) => {
         )}
       </div>
 
-      {/* Vendedor responsável (opcional) */}
+      {/* Vendedor (opcional) */}
       {(transaction.sellerName || transaction.sellerEmail) && (
         <div className="mb-4 text-sm text-gray-800 avoid-break">
           <p className="font-semibold">Vendedor responsável</p>
@@ -195,20 +193,14 @@ const ReceiptPage = ({ transactionId, onBack }) => {
         </div>
       )}
 
-      {/* Dados do Cliente (organizado) */}
+      {/* Cliente */}
       <div className="mb-6 avoid-break">
         <h2 className="text-lg font-semibold text-gray-800 border-b pb-1 mb-3">Dados do Cliente</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-800">
           <div><strong>Nome:</strong> {transaction.customerName || 'Consumidor Final'}</div>
-          {transaction.customerCpfCnpj && (
-            <div><strong>CPF/CNPJ:</strong> {transaction.customerCpfCnpj}</div>
-          )}
-          {transaction.customerPhone && (
-            <div><strong>Telefone:</strong> {transaction.customerPhone}</div>
-          )}
-          {transaction.customerEmail && (
-            <div><strong>E-mail:</strong> {transaction.customerEmail}</div>
-          )}
+          {transaction.customerCpfCnpj && <div><strong>CPF/CNPJ:</strong> {transaction.customerCpfCnpj}</div>}
+          {transaction.customerPhone && <div><strong>Telefone:</strong> {transaction.customerPhone}</div>}
+          {transaction.customerEmail && <div><strong>E-mail:</strong> {transaction.customerEmail}</div>}
           {transaction.customerAddress && (
             <div className="md:col-span-2"><strong>Endereço:</strong> {transaction.customerAddress}</div>
           )}
@@ -218,7 +210,7 @@ const ReceiptPage = ({ transactionId, onBack }) => {
       {/* Itens */}
       <div className="avoid-break">
         <table className="w-full text-sm border border-black border-collapse print:text-sm mb-6">
-          <thead className="bg-gray-100">
+          <thead className="bg-gray-100 text-gray-700">
             <tr>
               <th className="w-[40%] text-left border border-black p-2">Produto</th>
               <th className="w-[15%] text-right border border-black p-2">Qtd.</th>
@@ -269,18 +261,18 @@ const ReceiptPage = ({ transactionId, onBack }) => {
         </table>
       </div>
 
-      {/* Forma de pagamento / Condições */}
+      {/* Pagamento / Condições */}
       <div className="mb-4 text-sm text-gray-800 avoid-break">
         <p className="font-semibold">{isQuote ? 'Condições de pagamento' : 'Forma de pagamento'}</p>
         <p className="leading-relaxed">{paymentConditions}</p>
       </div>
 
-      {/* Tabela de parcelas (se houver no backend) */}
+      {/* Parcelas */}
       {!isQuote && Array.isArray(transaction.payments) && transaction.payments.length > 0 && (
         <div className="mb-6 avoid-break">
           <h3 className="text-sm font-semibold text-gray-800 mb-2">Parcelas</h3>
           <table className="w-full text-sm border border-black border-collapse">
-            <thead className="bg-gray-100">
+            <thead className="bg-gray-100 text-gray-700">
               <tr>
                 <th className="text-left border border-black p-2">#</th>
                 <th className="text-left border border-black p-2">Vencimento</th>
@@ -299,11 +291,13 @@ const ReceiptPage = ({ transactionId, onBack }) => {
                   <td className="border border-black p-2">{p.status || 'ABERTO'}</td>
                 </tr>
               ))}
+              <tr className="bg-gray-100">
+                <td className="border border-black p-2 font-bold" colSpan={2}>Total das parcelas</td>
+                <td className="border border-black p-2 text-right font-bold">{formatCurrency(paymentsTotal)}</td>
+                <td className="border border-black p-2" colSpan={2}></td>
+              </tr>
             </tbody>
           </table>
-          <p className="text-xs text-base-400 mt-1">
-            Observação: as parcelas são exibidas quando geradas no financeiro. Se não aparecerem, confira se a venda foi cadastrada com parcelas no backend.
-          </p>
         </div>
       )}
 
@@ -346,7 +340,7 @@ const ReceiptPage = ({ transactionId, onBack }) => {
           </button>
         )}
         <button
-          onClick={() => setTimeout(() => window.print(), 150)}
+          onClick={() => setTimeout(() => window.print(), 100)}
           className="px-4 py-2 bg-[#c05621] text-white rounded hover:brightness-110"
         >
           Imprimir {isQuote ? 'Orçamento' : 'Recibo'}

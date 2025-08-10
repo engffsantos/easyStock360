@@ -65,7 +65,7 @@ class Product(db.Model):
     min_stock = db.Column(db.Integer, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    history = db.relationship('ProductHistory', backref='product', lazy=True, cascade='all, delete-orphan')
+    history = db.relationship('ProductHistory', backref='product', lazy=True)
 
 # -----------------------------
 # ProductHistory (mantido)
@@ -98,23 +98,17 @@ class Sale(db.Model):
     freight = db.Column(db.Float, nullable=False, default=0.0)
     total = db.Column(db.Float, nullable=False, default=0.0)
 
-    # Pagamento da venda (quando COMPLETED)
-    payment_method = db.Column(db.String(32), nullable=True)   # PIX | DINHEIRO | CARTAO_CREDITO | CARTAO_DEBITO | BOLETO
-    installments = db.Column(db.Integer, nullable=False, default=1)
+    # Pagamento (NOVO)
+    payment_method = db.Column(db.String, nullable=True)  # PIX|DINHEIRO|CARTAO_CREDITO|CARTAO_DEBITO|BOLETO
+    installments = db.Column(db.Integer, nullable=True)   # número de parcelas
 
     # Validade (apenas para QUOTE)
     valid_until = db.Column(db.DateTime, nullable=True)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # Relacionamentos
-    items = db.relationship('SaleItem', backref='sale', lazy=True, cascade='all, delete-orphan')
-    payments = db.relationship('SalePayment', backref='sale', lazy=True, cascade='all, delete-orphan')
-
-    # Índices úteis
-    __table_args__ = (
-        db.Index('ix_sales_created_at', 'created_at'),
-    )
+    items = db.relationship('SaleItem', backref='sale', lazy=True)
+    payments = db.relationship('SalePayment', backref='sale', lazy=True, order_by='SalePayment.due_date')
 
 # -----------------------------
 # SaleItem (mantido)
@@ -137,18 +131,11 @@ class SalePayment(db.Model):
 
     id = db.Column(db.String, primary_key=True, default=generate_uuid)
     sale_id = db.Column(db.String, db.ForeignKey('sales.id'), nullable=False)
-
-    amount = db.Column(db.Float, nullable=False, default=0.0)
-    due_date = db.Column(db.Date, nullable=True)  # pode ser None para pagamento imediato
-    status = db.Column(db.String(16), nullable=False, default='PENDENTE')  # PENDENTE | PAGO | VENCIDO
-    payment_method = db.Column(db.String(32), nullable=True)  # PIX | DINHEIRO | CARTAO_CREDITO | ...
-
+    due_date = db.Column(db.Date, nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    payment_method = db.Column(db.String, nullable=False)   # mesma enum textual usada em Sale.payment_method
+    status = db.Column(db.String, nullable=False, default='PENDENTE')  # PENDENTE|PAGO|CANCELADO
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    __table_args__ = (
-        db.Index('ix_sale_payments_due_date', 'due_date'),
-        db.Index('ix_sale_payments_status', 'status'),
-    )
 
 # -----------------------------
 # FinancialEntry (mantido)
@@ -157,7 +144,7 @@ class FinancialEntry(db.Model):
     __tablename__ = 'financial_entries'
 
     id = db.Column(db.String, primary_key=True, default=generate_uuid)
-    type = db.Column(db.String, nullable=False)  # RECEITA | DESPESA
+    type = db.Column(db.String, nullable=False)
     description = db.Column(db.String, nullable=False)
     amount = db.Column(db.Float, nullable=False)
     due_date = db.Column(db.Date, nullable=False)

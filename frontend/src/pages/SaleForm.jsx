@@ -17,6 +17,34 @@ const PAYMENT_METHODS = {
 const formatCurrency = (value) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value || 0));
 
+function splitAmountsBRL(totalNumber, n) {
+  // Distribui em centavos para evitar erro de arredondamento
+  const total = Math.round(Number(totalNumber || 0) * 100);
+  const base = Math.floor(total / n);
+  const remainder = total % n;
+  const arr = Array.from({ length: n }, (_, i) => base + (i < remainder ? 1 : 0));
+  return arr.map(v => v / 100);
+}
+
+function addMonths(date, months) {
+  const d = new Date(date);
+  const day = d.getDate();
+  d.setMonth(d.getMonth() + months);
+  // Ajuste para meses com menos dias
+  if (d.getDate() < day) {
+    d.setDate(0);
+  }
+  return d;
+}
+
+function toInputDate(d) {
+  const dd = new Date(d);
+  const y = dd.getFullYear();
+  const m = String(dd.getMonth() + 1).padStart(2, '0');
+  const day = String(dd.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 const PrimaryButton = ({ children, type = 'button', onClick, className = '', ...props }) => (
   <button
     type={type}
@@ -51,6 +79,9 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
   // Pagamento
   const [paymentMethod, setPaymentMethod] = useState('PIX');
   const [installments, setInstallments] = useState(1);
+
+  // Datas de boleto
+  const [boletoDueDates, setBoletoDueDates] = useState(['']);
 
   // Item atual
   const [currentItem, setCurrentItem] = useState({ productId: '', quantity: 1 });
@@ -98,9 +129,18 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
       setDiscountValue(transactionToEdit.discountValue || 0);
       setFreight(transactionToEdit.freight || 0);
 
-      // Se vierem dados de pagamento (em edição futura de venda direta)
       if (transactionToEdit.paymentMethod) setPaymentMethod(transactionToEdit.paymentMethod);
       if (transactionToEdit.installments) setInstallments(transactionToEdit.installments);
+
+      // Se vierem parcelas (edição), tenta extrair vencimentos para boleto
+      if (Array.isArray(transactionToEdit.payments) && transactionToEdit.payments.length > 0) {
+        const dds = transactionToEdit.payments.map(p =>
+          p.dueDate ? toInputDate(new Date(p.dueDate)) : ''
+        );
+        setBoletoDueDates(dds.length ? dds : ['']);
+      } else {
+        setBoletoDueDates(['']);
+      }
     } else {
       // Reset novo
       setSaleItems([]);
@@ -111,6 +151,7 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
       setFreight(0);
       setPaymentMethod('PIX');
       setInstallments(1);
+      setBoletoDueDates(['']);
     }
   }, [transactionToEdit]);
 
@@ -185,7 +226,7 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
     setItemError('');
     if (!selectedProduct) return setItemError('Selecione um produto.');
     if (currentItem.quantity <= 0) return setItemError('Quantidade deve ser maior que zero.');
-    if (formType === 'COMPLETED' && currentItem.quantity > selectedProduct.quantity) {
+    if (formType === 'COMPLETED' && selectedProduct && currentItem.quantity > selectedProduct.quantity) {
       return setItemError(`Estoque insuficiente. Disponível: ${selectedProduct.quantity}.`);
     }
     if (saleItems.some(item => item.productId === selectedProduct.id)) {
@@ -208,11 +249,58 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
     setSaleItems(prev => prev.filter(i => i.productId !== productId));
   };
 
+  // Atualiza quantidade de campos de vencimento ao mudar nº de parcelas
+  useEffect(() => {
+    if (paymentMethod !== 'BOLETO') return;
+    setBoletoDueDates(prev => {
+      const next = [...prev];
+      if (installments > next.length) {
+        while (next.length < installments) next.push('');
+      } else if (installments < next.length) {
+        next.length = installments;
+      }
+      return next;
+    });
+  }, [installments, paymentMethod]);
+
+  const autofillMonthlyBoleto = () => {
+    const today = new Date();
+    const first = addMonths(today, 1);
+    const arr = Array.from({ length: Math.max(1, Number(installments) || 1) }, (_, i) =>
+      toInputDate(addMonths(first, i))
+    );
+    setBoletoDueDates(arr);
+  };
+
+  const handleChangeBoletoDate = (index, value) => {
+    setBoletoDueDates(prev => {
+      const next = [...prev];
+      next[index] = value;
+      return next;
+    });
+  };
+
   // Submit
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (saleItems.length === 0) return alert('Adicione pelo menos um item.');
     if (total < 0) return alert('O total não pode ser negativo. Verifique o desconto/frete.');
+
+    // Validação de datas para boleto
+    let boletoPayments = [];
+    if (formType === 'COMPLETED' && paymentMethod === 'BOLETO') {
+      const n = Math.max(1, Number(installments) || 1);
+      if (boletoDueDates.length !== n || boletoDueDates.some(d => !d)) {
+        return alert('Preencha todas as datas de vencimento das parcelas de boleto.');
+      }
+      const amounts = splitAmountsBRL(total, n);
+      boletoPayments = boletoDueDates.map((d, i) => ({
+        dueDate: new Date(`${d}T00:00:00Z`).toISOString(),
+        amount: amounts[i],
+        paymentMethod: 'BOLETO',
+        status: 'ABERTO',
+      }));
+    }
 
     const customer = customers.find(c => c.id === selectedCustomerId);
     const payload = {
@@ -226,13 +314,21 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
       discountValue: Number(discountValue) || 0,
       freight: Number(freight) || 0,
 
-      // Pré-visualização (opcional)
+      // Pré-visualização
       subtotal,
       total,
 
-      // IMPORTANTe: enviar forma de pagamento na RAIZ quando COMPLETED
+      // Forma de pagamento (na raiz) quando COMPLETED
       ...(formType === 'COMPLETED'
-        ? { paymentMethod, installments: Number(installments) || 1 }
+        ? {
+            paymentMethod,
+            installments: Number(installments) || 1,
+          }
+        : {}),
+
+      // Parcelas detalhadas (quando BOLETO)
+      ...(formType === 'COMPLETED' && paymentMethod === 'BOLETO'
+        ? { payments: boletoPayments }
         : {}),
     };
 
@@ -317,37 +413,69 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
         </ModalWrapper>
 
         {formType === 'COMPLETED' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-            <div>
-              <label className="block mb-1 text-sm ">Forma de pagamento</label>
-              <select
-                value={paymentMethod}
-                onChange={e => {
-                  setPaymentMethod(e.target.value);
-                  setInstallments(1);
-                }}
-                className="w-full p-2 border rounded"
-              >
-                {Object.entries(PAYMENT_METHODS).map(([k, v]) => (
-                  <option key={k} value={k}>{v}</option>
-                ))}
-              </select>
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              <div>
+                <label className="block mb-1 text-sm ">Forma de pagamento</label>
+                <select
+                  value={paymentMethod}
+                  onChange={e => {
+                    setPaymentMethod(e.target.value);
+                    setInstallments(1);
+                    setBoletoDueDates(['']);
+                  }}
+                  className="w-full p-2 border rounded"
+                >
+                  {Object.entries(PAYMENT_METHODS).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block mb-1 text-sm ">Parcelas</label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={installments}
+                  onChange={e => setInstallments(parseInt(e.target.value) || 1)}
+                  disabled={!['CARTAO_CREDITO', 'BOLETO'].includes(paymentMethod)}
+                />
+              </div>
             </div>
-            <div>
-              <label className="block mb-1 text-sm ">Parcelas</label>
-              <Input
-                type="number"
-                min="1"
-                value={installments}
-                onChange={e => setInstallments(parseInt(e.target.value) || 1)}
-                disabled={!['CARTAO_CREDITO', 'BOLETO'].includes(paymentMethod)}
-              />
-            </div>
-          </div>
+
+            {paymentMethod === 'BOLETO' && (
+              <div className="mt-4 border rounded p-3 bg-white">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h4 className="font-semibold">Vencimentos do Boleto</h4>
+                  <div className="flex gap-2">
+                    <SecondaryButton onClick={autofillMonthlyBoleto}>
+                      Preencher mensalmente
+                    </SecondaryButton>
+                  </div>
+                </div>
+                <p className="text-sm text-base-400 mb-2">
+                  Informe o <strong>vencimento</strong> de cada parcela. Os valores serão distribuídos automaticamente.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {Array.from({ length: Math.max(1, Number(installments) || 1) }).map((_, i) => (
+                    <div key={i}>
+                      <label className="block text-sm mb-1">Parcela #{i + 1} - Vencimento</label>
+                      <input
+                        type="date"
+                        className="w-full p-2 border rounded"
+                        value={boletoDueDates[i] || ''}
+                        onChange={(e) => handleChangeBoletoDate(i, e.target.value)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </Card>
 
-      {/* Adicionar Itens (com autocomplete de produto + foco em quantidade) */}
+      {/* Adicionar Itens */}
       <Card className="!p-4">
         <h3 className="font-bold mb-2">Adicionar Itens</h3>
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-start">
@@ -373,7 +501,6 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
                 }
                 setItemError('');
                 setCurrentItem(prev => ({ ...prev, productId: p.id }));
-                // foca a quantidade após selecionar
                 setTimeout(() => qtyInputRef.current?.focus(), 0);
               }}
               isClearable
@@ -421,33 +548,37 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
               <th className="text-left">Ação</th>
             </tr>
           </thead>
-          <tbody>
-            {saleItems.length > 0 ? saleItems.map(item => (
-              <tr key={item.productId} className="border-t">
-                <td className="py-2">{item.productName}</td>
-                <td className="py-2">{item.quantity} × {formatCurrency(item.price)}</td>
-                <td className="py-2 text-right">{formatCurrency(item.quantity * item.price)}</td>
-                <td className="py-2">
-                  <button type="button" onClick={() => handleRemoveItem(item.productId)} className="text-danger">
-                    <TrashIcon className="w-5 h-5" />
-                  </button>
-                </td>
-              </tr>
-            )) : (
-              <tr>
-                <td colSpan="4" className="text-center py-4">Nenhum item adicionado.</td>
-              </tr>
-            )}
-          </tbody>
-          {saleItems.length > 0 && (
-            <tfoot>
-              <tr>
-                <td colSpan="2" className="text-right font-bold pt-2">Subtotal</td>
-                <td colSpan="2" className="font-bold pt-2">{formatCurrency(subtotal)}</td>
-              </tr>
-            </tfoot>
-          )}
         </table>
+        <div className="max-h-80 overflow-auto">
+          <table className="w-full">
+            <tbody>
+              {saleItems.length > 0 ? saleItems.map(item => (
+                <tr key={item.productId} className="border-t">
+                  <td className="py-2">{item.productName}</td>
+                  <td className="py-2">{item.quantity} × {formatCurrency(item.price)}</td>
+                  <td className="py-2 text-right">{formatCurrency(item.quantity * item.price)}</td>
+                  <td className="py-2">
+                    <button type="button" onClick={() => handleRemoveItem(item.productId)} className="text-danger">
+                      <TrashIcon className="w-5 h-5" />
+                    </button>
+                  </td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan="4" className="text-center py-4">Nenhum item adicionado.</td>
+                </tr>
+              )}
+            </tbody>
+            {saleItems.length > 0 && (
+              <tfoot>
+                <tr>
+                  <td colSpan="2" className="text-right font-bold pt-2">Subtotal</td>
+                  <td colSpan="2" className="font-bold pt-2">{formatCurrency(subtotal)}</td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
       </Card>
 
       {/* Resumo & Descontos */}
@@ -499,6 +630,17 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
             </div>
           </div>
         </div>
+
+        {paymentMethod === 'BOLETO' && formType === 'COMPLETED' && (
+          <div className="mt-4 text-sm">
+            <p className="font-medium">Distribuição do total por parcela (estimativa):</p>
+            <ul className="list-disc pl-5">
+              {splitAmountsBRL(total, Math.max(1, Number(installments) || 1)).map((v, i) => (
+                <li key={i}>Parcela #{i + 1}: {formatCurrency(v)}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {discountType === 'PERCENT' && Number(discountValue) > 100 && (
           <p className="text-danger text-sm mt-2">

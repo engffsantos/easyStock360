@@ -9,6 +9,9 @@ from .routes.sales import sales_bp
 from .routes.financial import financial_bp
 from .routes.reports import reports_bp
 from .routes.settings import settings_bp
+from .routes.sales_payments import sales_payments_bp
+
+
 def create_app():
     app = Flask(__name__)
 
@@ -29,7 +32,7 @@ def create_app():
     app.register_blueprint(financial_bp, url_prefix='/api/financial')
     app.register_blueprint(reports_bp, url_prefix='/api/reports')
     app.register_blueprint(settings_bp, url_prefix='/api/settings')
-
+    app.register_blueprint(sales_payments_bp, url_prefix='/api')
 
     # Criação automática das tabelas
     with app.app_context():
