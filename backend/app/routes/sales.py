@@ -111,6 +111,16 @@ def sale_to_dict(sale: Sale):
         ]
     }
 
+def payment_to_dict(p: SalePayment):
+    return {
+        'id': p.id,
+        'saleId': p.sale_id,
+        'dueDate': p.due_date.isoformat() if p.due_date else None,
+        'amount': p.amount,
+        'paymentMethod': p.payment_method,
+        'status': p.status,
+    }
+
 # -----------------------------
 # GET /api/sales/ - Vendas (status COMPLETED)
 # -----------------------------
@@ -195,7 +205,7 @@ def add_transaction():
             sale_item = SaleItem(
                 sale_id=sale.id,
                 product_id=item['productId'],
-                product_name=item['productName'],
+                product_name=item['ProductName'] if 'ProductName' in item else item['productName'],
                 quantity=int(item['quantity']),
                 price=float(item['price'])
             )
@@ -266,7 +276,7 @@ def update_quote(id):
             db.session.add(SaleItem(
                 sale_id=sale.id,
                 product_id=item['productId'],
-                product_name=item['productName'],
+                product_name=item['ProductName'] if 'ProductName' in item else item['productName'],
                 quantity=int(item['quantity']),
                 price=float(item['price'])
             ))
@@ -357,3 +367,52 @@ def cancel_sale(id):
     sale.status = 'CANCELLED'
     db.session.commit()
     return jsonify({'message': 'Venda cancelada com sucesso'}), 200
+
+# =============================
+# PAGAMENTOS (PARCELAS) DA VENDA
+# =============================
+
+# POST /api/sales/payments/<payment_id>/pay  → marca parcela como PAGO
+@sales_bp.route('/payments/<payment_id>/pay', methods=['POST'])
+def pay_sale_payment(payment_id):
+    payment = SalePayment.query.get_or_404(payment_id)
+    if payment.status == 'PAGO':
+        return jsonify({'error': 'Parcela já está paga'}), 400
+    payment.status = 'PAGO'
+    db.session.commit()
+    return jsonify({'message': 'Parcela marcada como paga', 'payment': payment_to_dict(payment)}), 200
+
+# PUT/PATCH /api/sales/payments/<payment_id>  → atualiza status (e opcionalmente outros campos)
+@sales_bp.route('/payments/<payment_id>', methods=['PUT', 'PATCH'])
+def update_sale_payment(payment_id):
+    payment = SalePayment.query.get_or_404(payment_id)
+    data = request.get_json() or {}
+
+    # Atualiza apenas campos seguros; principal objetivo é permitir trocar STATUS
+    if 'status' in data:
+        new_status = str(data['status']).upper()
+        # Estados aceitos (ajuste conforme seu domínio)
+        allowed = {'PENDENTE', 'VENCIDO', 'PAGO', 'CANCELADO'}
+        if new_status not in allowed:
+            return jsonify({'error': f'Status inválido. Use um de: {", ".join(sorted(allowed))}'}), 400
+        payment.status = new_status
+
+    if 'dueDate' in data:
+        # aceita "YYYY-MM-DD" ou ISO
+        try:
+            due = datetime.strptime(str(data['dueDate'])[:10], '%Y-%m-%d').date()
+            payment.due_date = due
+        except Exception:
+            return jsonify({'error': 'Data de vencimento inválida (use YYYY-MM-DD)'}), 400
+
+    if 'amount' in data:
+        try:
+            payment.amount = float(data['amount'])
+        except Exception:
+            return jsonify({'error': 'Valor inválido'}), 400
+
+    if 'paymentMethod' in data:
+        payment.payment_method = data['paymentMethod']
+
+    db.session.commit()
+    return jsonify({'message': 'Parcela atualizada com sucesso', 'payment': payment_to_dict(payment)}), 200

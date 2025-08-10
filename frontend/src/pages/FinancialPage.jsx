@@ -58,6 +58,27 @@ const TinyStat = ({ label, value }) => (
   </div>
 );
 
+const METHOD_LABEL = {
+  PIX: 'PIX',
+  DINHEIRO: 'Dinheiro',
+  CARTAO_CREDITO: 'Crédito',
+  CARTAO_DEBITO: 'Débito',
+  BOLETO: 'Boleto',
+};
+
+const STATUS_OPTIONS = ['PENDENTE', 'VENCIDO', 'PAGO'];
+
+// Normaliza status com base em dueDate quando não vier do backend
+function inferStatus(rawStatus, dueDate) {
+  if (rawStatus === 'PAGO') return 'PAGO';
+  if (!dueDate) return rawStatus || 'PENDENTE';
+  const d = parseISOWithTZ(dueDate);
+  const now = new Date(`${todayISO()}T23:59:59`);
+  if (rawStatus && rawStatus !== 'PENDENTE') return rawStatus;
+  return d < now ? 'VENCIDO' : 'PENDENTE';
+}
+
+/** -------------------- FORMS DE CRIAÇÃO -------------------- */
 const ExpenseForm = ({ onSave, onClose, isSaving }) => {
   const [formData, setFormData] = useState({
     description: '',
@@ -178,25 +199,7 @@ const ReceivableForm = ({ onSave, onClose, isSaving }) => {
   );
 };
 
-const METHOD_LABEL = {
-  PIX: 'PIX',
-  DINHEIRO: 'Dinheiro',
-  CARTAO_CREDITO: 'Crédito',
-  CARTAO_DEBITO: 'Débito',
-  BOLETO: 'Boleto',
-};
-
-// Normaliza status com base em dueDate quando não vier do backend
-function inferStatus(rawStatus, dueDate) {
-  if (rawStatus === 'PAGO') return 'PAGO';
-  if (!dueDate) return rawStatus || 'PENDENTE';
-  const d = parseISOWithTZ(dueDate);
-  const now = new Date(`${todayISO()}T23:59:59`);
-  if (rawStatus && rawStatus !== 'PENDENTE') return rawStatus;
-  return d < now ? 'VENCIDO' : 'PENDENTE';
-}
-
-// Gera lançamentos de RECEITA a partir de vendas e suas parcelas (se existirem)
+/** -------------------- MAPEA SALES → RECEITAS -------------------- */
 function mapSalesToReceivables(sales) {
   const receivables = [];
   sales.forEach((s) => {
@@ -218,7 +221,7 @@ function mapSalesToReceivables(sales) {
           __source: 'sale_payment',
           __saleId: s.id,
           __installment: idx + 1,
-          __paymentId: p.id || null, // <- id real da parcela, se existir
+          __paymentId: p.id || null, // id real da parcela, se existir
         });
       });
     } else {
@@ -271,6 +274,97 @@ function exportCSV(rows, filename = 'lancamentos.csv') {
   URL.revokeObjectURL(url);
 }
 
+/** -------------------- MODAL DE EDIÇÃO -------------------- */
+const EditEntryModal = ({ isOpen, onClose, entry, onSubmit, isSaving }) => {
+  if (!isOpen || !entry) return null;
+
+  const isReceita = entry.type === 'RECEITA';
+  const isDespesa = entry.type === 'DESPESA';
+  const isManual = entry.__source === 'manual';
+  const isSalePayment = entry.__source === 'sale_payment';
+
+  // Estados locais do formulário
+  const [description, setDescription] = useState(entry.description || '');
+  const [amount, setAmount] = useState(Number(entry.amount || 0));
+  const [dueDate, setDueDate] = useState((entry.dueDate || '').slice(0, 10));
+  const [paymentMethod, setPaymentMethod] = useState(entry.paymentMethod || 'PIX');
+  const [status, setStatus] = useState(inferStatus(entry.status, entry.dueDate));
+
+  // Regras:
+  // - DESPESA manual: pode editar tudo + status
+  // - RECEITA manual: pode editar campos + status
+  // - RECEITA sale_payment: permitir somente status (UI deixa claro)
+  const canEditFields =
+    (isDespesa && isManual) ||
+    (isReceita && isManual);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const payload = {
+      description,
+      amount,
+      dueDate,
+      paymentMethod,
+      status,
+      type: entry.type,
+    };
+    onSubmit(payload);
+  };
+
+  return (
+    <ModalWrapper isOpen={isOpen} onClose={onClose} title={`Editar ${isReceita ? 'Receita' : 'Despesa'}`}>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {canEditFields ? (
+          <>
+            <Input id="edit_desc" label="Descrição" value={description} onChange={(e) => setDescription(e.target.value)} />
+            <Input id="edit_amount" label="Valor (R$)" type="number" step="0.01" value={amount} onChange={(e) => setAmount(parseFloat(e.target.value) || 0)} />
+            <Input id="edit_due" label="Data de Vencimento" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            <div>
+              <label className="block text-sm font-medium mb-1">Forma de Pagamento</label>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                className="w-full bg-white border border-base-200 rounded-md shadow-sm p-2 focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-base-400"
+              >
+                {['PIX', 'DINHEIRO', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'BOLETO'].map(m => (
+                  <option key={m} value={m}>{METHOD_LABEL[m] || m}</option>
+                ))}
+              </select>
+            </div>
+          </>
+        ) : (
+          <div className="p-3 rounded bg-base-100 text-sm">
+            {isSalePayment ? (
+              <p>
+                Esta é uma <strong>parcela de venda</strong>. Aqui você pode alterar o <strong>status</strong>. Para marcar como pago, use a ação de <em>Receber</em> ou selecione <strong>PAGO</strong> abaixo.
+              </p>
+            ) : (
+              <p>Altere o <strong>status</strong> desta receita.</p>
+            )}
+          </div>
+        )}
+
+        <div>
+          <label className="block text-sm font-medium mb-1">Status</label>
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            className="w-full bg-white border border-base-200 rounded-md shadow-sm p-2 focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-base-400"
+          >
+            {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+
+        <div className="flex justify-end gap-3 pt-4">
+          <SecondaryButton onClick={onClose} disabled={isSaving}>Cancelar</SecondaryButton>
+          <PrimaryButton type="submit" disabled={isSaving}>{isSaving ? 'Salvando...' : 'Salvar Alterações'}</PrimaryButton>
+        </div>
+      </form>
+    </ModalWrapper>
+  );
+};
+
+/** -------------------- PÁGINA -------------------- */
 const FinancialPage = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [entries, setEntries] = useState([]);
@@ -281,6 +375,10 @@ const FinancialPage = () => {
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isReceivableModalOpen, setIsReceivableModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Modal de edição
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editEntry, setEditEntry] = useState(null);
 
   // Filtros
   const [search, setSearch] = useState('');
@@ -364,7 +462,7 @@ const FinancialPage = () => {
     } catch (e) {
       alert(`Falha ao salvar despesa: ${e}`);
     } finally {
-           setIsSaving(false);
+      setIsSaving(false);
     }
   };
 
@@ -376,6 +474,50 @@ const FinancialPage = () => {
       fetchData();
     } catch (e) {
       alert(`Falha ao salvar receita: ${e}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  /** --------- EDIÇÃO --------- */
+  const openEdit = (entry) => {
+    setEditEntry(entry);
+    setIsEditOpen(true);
+  };
+
+  const saveEdit = async (payload) => {
+    if (!editEntry) return;
+    setIsSaving(true);
+    try {
+      // DESPESAS/RECEITAS manuais → updateFinancialEntry
+      if (editEntry.__source === 'manual') {
+        await api.updateFinancialEntry(editEntry.id, {
+          description: payload.description,
+          amount: payload.amount,
+          dueDate: payload.dueDate,
+          paymentMethod: payload.paymentMethod,
+          status: payload.status,
+          type: editEntry.type,
+        });
+      } else if (editEntry.__source === 'sale_payment' && editEntry.__paymentId) {
+        // RECEITAS de venda (parcela)
+        if (payload.status === 'PAGO') {
+          // Reutiliza a rota existente de recebimento
+          await api.paySalePayment(editEntry.__paymentId);
+        } else {
+          // Atualiza status da parcela (novo endpoint)
+          await api.updateSalePaymentStatus(editEntry.__paymentId, { status: payload.status });
+        }
+      } else {
+        // Outros casos (ex.: sale_total) – nada a editar
+        alert('Este lançamento não suporta edição.');
+      }
+
+      setIsEditOpen(false);
+      setEditEntry(null);
+      fetchData();
+    } catch (e) {
+      alert(`Falha ao salvar edição: ${e?.response?.data?.error || e.message}`);
     } finally {
       setIsSaving(false);
     }
@@ -526,6 +668,7 @@ const FinancialPage = () => {
                   <td className="px-4 py-2"><span className={statusBadgeClass(status)}>{status}</span></td>
                   <td className="px-4 py-2">
                     <div className="flex gap-2 items-center">
+                      {/* Receber / Pagar ações rápidas */}
                       {canReceiveManual && (
                         <PrimaryButton onClick={() => handleMarkAsPaid(entry.id)}>
                           <DollarSignIcon className="w-4 h-4" /> Receber
@@ -541,14 +684,32 @@ const FinancialPage = () => {
                           <DollarSignIcon className="w-4 h-4" /> Pagar
                         </PrimaryButton>
                       )}
+
+                      {/* EDITAR */}
+                      {entry.type === 'DESPESA' && isManual && (
+                        <SecondaryButton onClick={() => openEdit(entry)}>
+                          Editar
+                        </SecondaryButton>
+                      )}
+                      {entry.type === 'RECEITA' && (
+                        <SecondaryButton onClick={() => openEdit(entry)}>
+                          Editar
+                        </SecondaryButton>
+                      )}
+
+                      {/* Excluir (somente despesa manual e não paga) */}
                       {canDelete && (
                         <button onClick={() => handleDeleteExpense(entry.id)} className="text-danger" title="Excluir">
                           <TrashIcon />
                         </button>
                       )}
-                      {/* Se for parcela de venda sem id (ex.: dados antigos), mostramos aviso */}
+
+                      {/* Aviso quando for parcela sem id */}
                       {entry.type === 'RECEITA' && isSalePayment && !hasRealPaymentId && status !== 'PAGO' && (
-                        <span className="text-xs text-base-300" title="Esta parcela não possui ID no backend; gere novamente a venda ou atualize o backend para persistir IDs das parcelas.">
+                        <span
+                          className="text-xs text-base-300"
+                          title="Esta parcela não possui ID no backend; gere novamente a venda ou atualize o backend para persistir IDs das parcelas."
+                        >
                           (parcela sem ID no backend)
                         </span>
                       )}
@@ -739,6 +900,15 @@ const FinancialPage = () => {
       <ModalWrapper isOpen={isReceivableModalOpen} onClose={() => setIsReceivableModalOpen(false)} title="Adicionar Nova Receita">
         <ReceivableForm onSave={handleSaveReceivable} onClose={() => setIsReceivableModalOpen(false)} isSaving={isSaving} />
       </ModalWrapper>
+
+      {/* Modal: Editar Lançamento */}
+      <EditEntryModal
+        isOpen={isEditOpen}
+        onClose={() => { setIsEditOpen(false); setEditEntry(null); }}
+        entry={editEntry}
+        onSubmit={saveEdit}
+        isSaving={isSaving}
+      />
     </>
   );
 };

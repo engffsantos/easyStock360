@@ -3,6 +3,12 @@ import axios from 'axios';
 
 const BASE_URL = 'http://localhost:5000/api';
 
+// Axios instance (padrão)
+const apiClient = axios.create({
+  baseURL: BASE_URL,
+  headers: { 'Content-Type': 'application/json' },
+});
+
 // Helper: normaliza erro de conversão de orçamento expirado (422)
 function normalizeConvertError(err) {
   const status = err?.response?.status;
@@ -15,92 +21,118 @@ function normalizeConvertError(err) {
   throw err;
 }
 
+// ---------- Update compatível para /financial ----------
+async function updateFinancialCompat(id, payload) {
+  // 1) PATCH /financial/:id
+  try {
+    const r = await apiClient.patch(`/financial/${id}`, payload);
+    return r.data;
+  } catch (e1) {
+    if (e1?.response?.status !== 405 && e1?.response?.status !== 404) throw e1;
+  }
+
+  // 2) PUT /financial/:id
+  try {
+    const r = await apiClient.put(`/financial/${id}`, payload);
+    return r.data;
+  } catch (e2) {
+    if (e2?.response?.status !== 405 && e2?.response?.status !== 404) throw e2;
+  }
+
+  // 3) POST /financial/:id/update (compat)
+  try {
+    const r = await apiClient.post(`/financial/${id}/update`, payload);
+    return r.data;
+  } catch (e3) {
+    const msg = e3?.response?.data?.error || e3.message;
+    const err = new Error(msg || 'Falha ao atualizar lançamento financeiro.');
+    err.cause = e3;
+    throw err;
+  }
+}
+
 export const api = {
   // -------------------------
   // Customers
   // -------------------------
-  getCustomers: () => axios.get(`${BASE_URL}/customers/`).then(res => res.data),
-  addCustomer: (data) => axios.post(`${BASE_URL}/customers/`, data),
-  updateCustomer: (id, data) => axios.put(`${BASE_URL}/customers/${id}`, data),
-  deleteCustomer: (id) => axios.delete(`${BASE_URL}/customers/${id}`),
-  addInteraction: (data) => axios.post(`${BASE_URL}/customers/${data.customerId}/interactions/`, data),
-  getInteractionsByCustomerId: (id) => axios.get(`${BASE_URL}/customers/${id}/interactions/`).then(res => res.data),
-  getCustomerPurchases: (id) => axios.get(`${BASE_URL}/customers/${id}/purchases/`).then(res => res.data),
+  getCustomers: () => apiClient.get(`/customers/`).then(res => res.data),
+  addCustomer: (data) => apiClient.post(`/customers/`, data),
+  updateCustomer: (id, data) => apiClient.put(`/customers/${id}`, data),
+  deleteCustomer: (id) => apiClient.delete(`/customers/${id}`),
+  addInteraction: (data) => apiClient.post(`/customers/${data.customerId}/interactions/`, data),
+  getInteractionsByCustomerId: (id) => apiClient.get(`/customers/${id}/interactions/`).then(res => res.data),
+  getCustomerPurchases: (id) => apiClient.get(`/customers/${id}/purchases/`).then(res => res.data),
 
   // -------------------------
   // Products
   // -------------------------
-  getProducts: () => axios.get(`${BASE_URL}/products/`).then(res => res.data),
-  addProduct: (data) => axios.post(`${BASE_URL}/products/`, data),
-  updateProduct: (id, data) => axios.put(`${BASE_URL}/products/${id}/`, data),
-  deleteProduct: (id) => axios.delete(`${BASE_URL}/products/${id}/`),
+  getProducts: () => apiClient.get(`/products/`).then(res => res.data),
+  addProduct: (data) => apiClient.post(`/products/`, data),
+  updateProduct: (id, data) => apiClient.put(`/products/${id}/`, data),
+  deleteProduct: (id) => apiClient.delete(`/products/${id}/`),
 
   // -------------------------
   // Sales
   // -------------------------
-  // Observação: o backend já retorna os novos campos:
-  // subtotal, discountType, discountValue, freight, total, validUntil
-  getSales: () => axios.get(`${BASE_URL}/sales/`).then(res => res.data),
-  getQuotes: () => axios.get(`${BASE_URL}/sales/quotes/`).then(res => res.data),
-  getTransactionById: (id) => axios.get(`${BASE_URL}/sales/${id}/`).then(res => res.data),
-
-  // add/update aceitam os novos campos; o servidor recalcula os totais
-  addTransaction: (data) => axios.post(`${BASE_URL}/sales/`, data),
-  updateTransaction: (id, data) => axios.put(`${BASE_URL}/sales/${id}/`, data),
-  deleteTransaction: (id) => axios.delete(`${BASE_URL}/sales/${id}/`),
-
-  // Conversão trata 422 (QUOTE_EXPIRED) e lança erro com .code
+  getSales: () => apiClient.get(`/sales/`).then(res => res.data),
+  getQuotes: () => apiClient.get(`/sales/quotes/`).then(res => res.data),
+  getTransactionById: (id) => apiClient.get(`/sales/${id}/`).then(res => res.data),
+  addTransaction: (data) => apiClient.post(`/sales/`, data),
+  updateTransaction: (id, data) => apiClient.put(`/sales/${id}/`, data),
+  deleteTransaction: (id) => apiClient.delete(`/sales/${id}/`),
   convertToSale: async (id, paymentDetails) => {
     try {
-      const res = await axios.post(`${BASE_URL}/sales/${id}/convert/`, paymentDetails);
+      const res = await apiClient.post(`/sales/${id}/convert/`, paymentDetails);
       return res.data;
     } catch (err) {
       normalizeConvertError(err);
     }
   },
+  cancelSale: (id) => apiClient.put(`/sales/${id}/cancel`),
 
-  cancelSale: (id) => axios.put(`${BASE_URL}/sales/${id}/cancel`),
-
-  // --- Sales Payments (novo) ---
+  // --- Sales Payments ---
   paySalePayment: (paymentId) =>
-    axios.post(`${BASE_URL}/sales/payments/${paymentId}/pay`).then(res => res.data),
+    apiClient.post(`/sales/payments/${paymentId}/pay`).then(res => res.data),
+
+  // Novo: atualizar status/infos da parcela da venda
+  updateSalePaymentStatus: (paymentId, data) =>
+    apiClient.put(`/sales/payments/${paymentId}`, data).then(res => res.data),
 
   // -------------------------
   // Financial
   // -------------------------
-  getFinancialEntries: () => axios.get(`${BASE_URL}/financial`).then(res => res.data),
-  addFinancialEntry: (data) => axios.post(`${BASE_URL}/financial`, data),
-  markFinancialEntryAsPaid: (id) => axios.post(`${BASE_URL}/financial/${id}/pay`),
-  deleteFinancialEntry: (id) => axios.delete(`${BASE_URL}/financial/${id}`),
+  getFinancialEntries: () => apiClient.get(`/financial`).then(res => res.data),
+  addFinancialEntry: (data) => apiClient.post(`/financial`, data),
+  markFinancialEntryAsPaid: (id) => apiClient.post(`/financial/${id}/pay`),
+  deleteFinancialEntry: (id) => apiClient.delete(`/financial/${id}`),
+
+  // Atualizar lançamento financeiro manual (receita/despesa)
+  updateFinancialEntry: (id, data) => updateFinancialCompat(id, data),
 
   // -------------------------
   // Reports
   // -------------------------
   getReportsData: (start, end) =>
-    axios.get(`${BASE_URL}/reports/?start=${start}&end=${end}`).then(res => res.data),
-  setGoals: (data) => axios.post(`${BASE_URL}/reports/goals/`, data),
-  getGoals: () => axios.get(`${BASE_URL}/reports/goals/`).then(res => res.data),
+    apiClient.get(`/reports/`, { params: { start, end } }).then(res => res.data),
+  setGoals: (data) => apiClient.post(`/reports/goals/`, data),
+  getGoals: () => apiClient.get(`/reports/goals/`).then(res => res.data),
 
   // -------------------------
   // Dashboard
   // -------------------------
-  // Ajustado: usa getQuotes() para contar orçamentos abertos corretamente
   getDashboardStats: () =>
     Promise.all([
-      api.getSales(),      // vendas COMPLETED
-      api.getQuotes(),     // orçamentos QUOTE
+      api.getSales(),
+      api.getQuotes(),
       api.getFinancialEntries(),
       api.getProducts()
     ]).then(([sales, quotes, entries, products]) => {
       const today = new Date().toISOString().slice(0, 10);
-
       const salesToday = sales.filter(s => (s.createdAt || '').startsWith(today));
-      const openQuotes = quotes; // já são QUOTE
-
+      const openQuotes = quotes;
       const receivable = entries.filter(e => e.type === 'RECEITA' && e.status !== 'PAGO');
       const payable = entries.filter(e => e.type === 'DESPESA' && e.status !== 'PAGO');
       const overduePayable = payable.filter(e => e.status === 'VENCIDO');
-
       const lowStock = products.filter(p => p.quantity <= p.minStock);
 
       return {
@@ -118,8 +150,8 @@ export const api = {
   // -------------------------
   // Settings
   // -------------------------
-  getCompanyInfo: () => axios.get(`${BASE_URL}/settings/company`).then(res => res.data),
-  saveCompanyInfo: (data) => axios.post(`${BASE_URL}/settings/company`, data),
+  getCompanyInfo: () => apiClient.get(`/settings/company`).then(res => res.data),
+  saveCompanyInfo: (data) => apiClient.post(`/settings/company`, data),
 };
 
 // Importar CSV
