@@ -16,6 +16,7 @@ import DashboardPage from './pages/DashboardPage';
 import FinancialPage from './pages/FinancialPage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
+import ReturnsPage from './pages/ReturnsPage'; // <- NOVO
 
 import { api } from './api/api';
 
@@ -88,7 +89,14 @@ const App = () => {
       case 'settings':
         return <SettingsPage />;
       case 'receipt':
-        return <ReceiptPage transactionId={currentView.transactionId} onBack={() => handleNavigate({ page: 'sales' })} />;
+        return (
+          <ReceiptPage
+            transactionId={currentView.transactionId}
+            onBack={() => handleNavigate({ page: 'sales' })}
+          />
+        );
+      case 'returns': // <- NOVO
+        return <ReturnsPage />;
       default:
         return <DashboardPage />;
     }

@@ -62,7 +62,8 @@ export const api = {
   addInteraction: (data) => apiClient.post(`/customers/${data.customerId}/interactions/`, data),
   getInteractionsByCustomerId: (id) => apiClient.get(`/customers/${id}/interactions/`).then(res => res.data),
   getCustomerPurchases: (id) => apiClient.get(`/customers/${id}/purchases/`).then(res => res.data),
-
+// Créditos do cliente
+  getCustomerCredits: (id) =>  apiClient.get(`/customers/${id}/credits/`).then(res => res.data),
   // -------------------------
   // Products
   // -------------------------
@@ -75,6 +76,10 @@ export const api = {
   // Sales
   // -------------------------
   getSales: () => apiClient.get(`/sales/`).then(res => res.data),
+  // NOVO: somente vendas concluídas (usa ?status=COMPLETED)
+  getCompletedSales: () =>
+    apiClient.get(`/sales/`, { params: { status: 'COMPLETED' } }).then(res => res.data),
+
   getQuotes: () => apiClient.get(`/sales/quotes/`).then(res => res.data),
   getTransactionById: (id) => apiClient.get(`/sales/${id}/`).then(res => res.data),
   addTransaction: (data) => apiClient.post(`/sales/`, data),
@@ -94,9 +99,22 @@ export const api = {
   paySalePayment: (paymentId) =>
     apiClient.post(`/sales/payments/${paymentId}/pay`).then(res => res.data),
 
-  // Novo: atualizar status/infos da parcela da venda
+  // Atualizar status/infos da parcela da venda
   updateSalePaymentStatus: (paymentId, data) =>
     apiClient.put(`/sales/payments/${paymentId}`, data).then(res => res.data),
+
+  // -------------------------
+  // Returns (Devoluções) — NOVO
+  // -------------------------
+  // Lista devoluções
+  getReturns: () => apiClient.get(`/returns`).then(res => res.data),
+
+  // Cria devolução
+  addReturn: (payload) => apiClient.post(`/returns`, payload).then(res => res.data),
+
+  // Atualiza status da devolução
+  updateReturnStatus: (id, status) =>
+    apiClient.patch(`/returns/${id}/status`, { status }).then(res => res.data),
 
   // -------------------------
   // Financial

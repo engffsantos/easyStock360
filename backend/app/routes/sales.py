@@ -122,11 +122,33 @@ def payment_to_dict(p: SalePayment):
     }
 
 # -----------------------------
-# GET /api/sales/ - Vendas (status COMPLETED)
+# GET /api/sales/ - Vendas (aceita ?status=...)
 # -----------------------------
 @sales_bp.route('/', methods=['GET'])
 def list_sales():
-    sales = Sale.query.filter_by(status='COMPLETED').order_by(Sale.created_at.desc()).all()
+    """
+    Aceita filtro opcional via query param:
+      - ?status=COMPLETED (default se omitido)
+      - ?status=QUOTE
+      - ?status=ALL
+      - ?status=COMPLETED,QUOTE (lista separada por vírgula)
+    """
+    status_param = (request.args.get('status') or '').strip().upper()
+
+    q = Sale.query
+    if status_param:
+        if status_param == 'ALL':
+            pass  # sem filtro por status
+        elif ',' in status_param:
+            statuses = [s.strip() for s in status_param.split(',') if s.strip()]
+            q = q.filter(Sale.status.in_(statuses))
+        else:
+            q = q.filter_by(status=status_param)
+    else:
+        # Comportamento anterior preservado: somente COMPLETED
+        q = q.filter_by(status='COMPLETED')
+
+    sales = q.order_by(Sale.created_at.desc()).all()
     return jsonify([sale_to_dict(s) for s in sales]), 200
 
 # -----------------------------

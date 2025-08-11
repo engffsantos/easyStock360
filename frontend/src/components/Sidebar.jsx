@@ -54,6 +54,8 @@ const Sidebar = ({ collapsed, onToggle, currentPage, onNavigate }) => {
           <NavItem icon={<DashboardIcon />} label="Dashboard" collapsed={collapsed} isActive={currentPage === 'dashboard'} onClick={() => onNavigate('dashboard')} />
           <NavItem icon={<InventoryIcon />} label="Estoque" collapsed={collapsed} isActive={currentPage === 'inventory'} onClick={() => onNavigate('inventory')} />
           <NavItem icon={<SalesIcon />} label="Vendas" collapsed={collapsed} isActive={currentPage === 'sales'} onClick={() => onNavigate('sales')} />
+          {/* NOVO: Devoluções */}
+          <NavItem icon={<SalesIcon />} label="Devoluções" collapsed={collapsed} isActive={currentPage === 'returns'} onClick={() => onNavigate('returns')} />
           <NavItem icon={<CustomersIcon />} label="Clientes" collapsed={collapsed} isActive={currentPage === 'customers'} onClick={() => onNavigate('customers')} />
           <NavItem icon={<FinancialIcon />} label="Financeiro" collapsed={collapsed} isActive={currentPage === 'financial'} onClick={() => onNavigate('financial')} />
           <NavItem icon={<ChartBarIcon />} label="Relatórios" collapsed={collapsed} isActive={currentPage === 'reports'} onClick={() => onNavigate('reports')} />

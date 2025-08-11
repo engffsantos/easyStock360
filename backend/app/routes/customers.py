@@ -182,3 +182,40 @@ def list_purchases(customer_id):
             ]
         } for sale in purchases
     ]), 200
+
+# -----------------------------
+# Listar créditos do cliente
+# -----------------------------
+@customers_bp.route('/<string:customer_id>/credits/', methods=['GET'])
+def get_customer_credits(customer_id):
+    """
+    Retorna o saldo total de créditos e as entradas de crédito do cliente.
+    Caso o modelo CustomerCredit não exista no projeto, retorna saldo 0.
+    """
+    # Garante que o cliente existe
+    Customer.query.get_or_404(customer_id)
+
+    # Tenta importar o modelo opcional
+    try:
+        from app.models import CustomerCredit
+    except Exception:
+        return jsonify({"totalBalance": 0.0, "entries": []}), 200
+
+    credits = (
+        CustomerCredit.query
+        .filter_by(customer_id=customer_id)
+        .order_by(CustomerCredit.created_at.desc())
+        .all()
+    )
+    total = sum(float(c.balance or 0) for c in credits)
+
+    return jsonify({
+        "totalBalance": total,
+        "entries": [{
+            "id": c.id,
+            "amount": float(c.amount or 0),
+            "balance": float(c.balance or 0),
+            "createdAt": c.created_at.isoformat() if c.created_at else None,
+            "returnId": c.return_id,
+        } for c in credits]
+    }), 200

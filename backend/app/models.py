@@ -195,3 +195,60 @@ class CompanySettings(db.Model):
             'fontSize': self.font_size,
             'updatedAt': self.updated_at.isoformat() if self.updated_at else None
         }
+
+# =====================================================================
+# NOVO: Devoluções (Return / ReturnItem) e (Opcional) CustomerCredit
+# =====================================================================
+
+# Observação: usamos campos textuais (db.String) para "resolution" e "status"
+# para manter compatibilidade ampla com bancos simples (sem Enum nativo).
+# Valores esperados:
+#   resolution: 'REEMBOLSO' | 'CREDITO'
+#   status:     'ABERTA' | 'CONCLUIDA' | 'CANCELADA'
+
+class Return(db.Model):
+    __tablename__ = 'returns'
+
+    id = db.Column(db.String, primary_key=True, default=generate_uuid)
+    sale_id = db.Column(db.String, db.ForeignKey('sales.id'), nullable=False)
+    customer_id = db.Column(db.String, db.ForeignKey('customers.id'), nullable=False)
+
+    reason = db.Column(db.Text, nullable=False)
+    resolution = db.Column(db.String, nullable=False, default='REEMBOLSO')  # REEMBOLSO|CREDITO
+    status = db.Column(db.String, nullable=False, default='ABERTA')         # ABERTA|CONCLUIDA|CANCELADA
+
+    total = db.Column(db.Float, nullable=False, default=0.0)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    # Relacionamentos
+    sale = db.relationship('Sale', backref='returns')
+    customer = db.relationship('Customer', backref='returns')
+    items = db.relationship('ReturnItem', backref='return_parent', cascade='all, delete-orphan', lazy=True)
+
+class ReturnItem(db.Model):
+    __tablename__ = 'return_items'
+
+    id = db.Column(db.String, primary_key=True, default=generate_uuid)
+    return_id = db.Column(db.String, db.ForeignKey('returns.id'), nullable=False)
+
+    product_id = db.Column(db.String, db.ForeignKey('products.id'), nullable=False)
+    product_name = db.Column(db.String, nullable=False)
+    quantity = db.Column(db.Integer, nullable=False)
+    price = db.Column(db.Float, nullable=False)
+
+    product = db.relationship('Product')
+
+# Opcional: controle de crédito de cliente para resolução 'CREDITO'
+class CustomerCredit(db.Model):
+    __tablename__ = 'customer_credits'
+
+    id = db.Column(db.String, primary_key=True, default=generate_uuid)
+    customer_id = db.Column(db.String, db.ForeignKey('customers.id'), nullable=False)
+    return_id = db.Column(db.String, db.ForeignKey('returns.id'), nullable=True)
+
+    amount = db.Column(db.Float, nullable=False)   # valor original concedido
+    balance = db.Column(db.Float, nullable=False)  # saldo disponível
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    customer = db.relationship('Customer')
+    ret = db.relationship('Return')
