@@ -1,5 +1,5 @@
 // frontend/src/components/CustomerDetailsModal.jsx
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/api';
 import { ModalWrapper, Input, Button, Card, Spinner } from './common';
 
@@ -15,7 +15,40 @@ const formatDate = (dateString) =>
       }).format(new Date(dateString))
     : '-';
 
-// Mini componente de Abas (bem simples, sem dependência externa)
+// === Helpers de status/parcelas (coerentes com Financeiro/Relatórios) ===
+const parseISOWithTZ = (s) => {
+  if (!s) return new Date();
+  if (!/Z|[+\-]\d{2}:\d{2}$/.test(s)) return new Date(`${s}Z`);
+  return new Date(s);
+};
+const todayISO = () => new Date().toISOString().slice(0, 10);
+function inferStatus(rawStatus, dueDate) {
+  if (rawStatus === 'PAGO') return 'PAGO';
+  if (!dueDate) return rawStatus || 'PENDENTE';
+  const d = parseISOWithTZ(dueDate);
+  const now = new Date(`${todayISO()}T23:59:59`);
+  if (rawStatus && rawStatus !== 'PENDENTE') return rawStatus;
+  return d < now ? 'VENCIDO' : 'PENDENTE';
+}
+const statusBadgeClass = (st) => {
+  const status = st || 'PENDENTE';
+  const map = {
+    PAGO: 'bg-primary-100 text-primary-800',
+    PENDENTE: 'bg-yellow-100 text-yellow-800',
+    VENCIDO: 'bg-red-100 text-red-800',
+  };
+  return `px-2 py-1 rounded ${map[status] || map.PENDENTE}`;
+};
+const saleFinanceStatus = (sale) => {
+  const payments = Array.isArray(sale?.payments) ? sale.payments : [];
+  if (payments.length === 0) return sale?.status === 'COMPLETED' ? 'PAGO' : 'PENDENTE';
+  const statuses = payments.map((p) => inferStatus(p.status, p.dueDate));
+  if (statuses.every((s) => s === 'PAGO')) return 'PAGO';
+  if (statuses.some((s) => s === 'VENCIDO')) return 'VENCIDO';
+  return 'PENDENTE';
+};
+
+// Tabs simples
 const Tabs = ({ tabs, active, onChange }) => (
   <div className="border-b border-base-200 flex gap-2 overflow-x-auto no-scrollbar">
     {tabs.map((t) => (
@@ -37,25 +70,14 @@ const CustomerDetailsModal = ({ customer, isOpen, onClose }) => {
 
   const [loading, setLoading] = useState(true);
   const [interactions, setInteractions] = useState([]);
-  const [purchases, setPurchases] = useState([]);
+  const [purchases, setPurchases] = useState([]); // com payments anexados
   const [returns, setReturns] = useState([]);
   const [credits, setCredits] = useState({ totalBalance: 0, entries: [] });
 
   const [newInteraction, setNewInteraction] = useState({ type: '', notes: '' });
   const [savingInteraction, setSavingInteraction] = useState(false);
 
-  const printRef = useRef(null);
-
-  const interactionTypes = [
-    'Telefone',
-    'E-mail',
-    'WhatsApp',
-    'Visita Presencial',
-    'Redes Sociais',
-    'Outro',
-  ];
-
-  // Carregar dados ao abrir
+  // Carrega dados ao abrir
   useEffect(() => {
     const load = async () => {
       if (!isOpen || !customer?.id) return;
@@ -65,15 +87,24 @@ const CustomerDetailsModal = ({ customer, isOpen, onClose }) => {
           api.getInteractionsByCustomerId(customer.id),
           api.getCustomerPurchases(customer.id),
           api.getReturns(),
-          // fallback caso o método ainda não exista
           (api.getCustomerCredits
             ? api.getCustomerCredits(customer.id)
             : Promise.resolve({ totalBalance: 0, entries: [] })
           ).catch(() => ({ totalBalance: 0, entries: [] })),
         ]);
 
+        // detalhe da venda para anexar parcelas e método
+        const details = await Promise.all((purch || []).map((p) => api.getTransactionById(p.id).catch(() => null)));
+        const byId = {};
+        details.forEach((d) => { if (d?.id) byId[d.id] = d; });
+        const purchWithPayments = (purch || []).map((p) => ({
+          ...p,
+          payments: byId[p.id]?.payments || [],
+          paymentMethod: byId[p.id]?.paymentMethod || p.paymentMethod,
+        }));
+
         setInteractions(ints || []);
-        setPurchases(purch || []);
+        setPurchases(purchWithPayments || []);
         setReturns((allReturns || []).filter((r) => r.customerId === customer.id));
         setCredits(creditData || { totalBalance: 0, entries: [] });
       } catch (e) {
@@ -85,74 +116,41 @@ const CustomerDetailsModal = ({ customer, isOpen, onClose }) => {
     load();
   }, [isOpen, customer]);
 
-  // Histórico unificado (Interações + Compras + Devoluções)
+  // Histórico unificado
   const history = useMemo(() => {
     const rows = [];
-
-    // Interações
-    interactions.forEach((i) => {
-      rows.push({
-        kind: 'INTERAÇÃO',
-        timestamp: i.date,
-        title: i.type,
-        description: i.notes,
-        amount: null,
-        link: null,
-      });
-    });
-
-    // Compras
+    interactions.forEach((i) => rows.push({
+      kind: 'INTERAÇÃO',
+      timestamp: i.date,
+      title: i.type,
+      description: i.notes,
+      amount: null,
+      link: null,
+    }));
     purchases.forEach((p) => {
+      const st = saleFinanceStatus(p);
       rows.push({
         kind: 'COMPRA',
         timestamp: p.createdAt,
         title: `Venda #${String(p.id).slice(0, 5)}`,
-        description: `Status: ${p.status} — Itens: ${p.items?.length || 0}`,
+        description: `Status: ${st} — Itens: ${p.items?.length || 0}`,
         amount: p.total,
         link: `/receipt/${p.id}`,
       });
     });
-
-    // Devoluções
-    returns.forEach((r) => {
-      rows.push({
-        kind: 'DEVOLUÇÃO',
-        timestamp: r.createdAt,
-        title: `Devolução #${String(r.id).slice(0, 5)} (Venda #${String(r.saleId).slice(0, 5)})`,
-        description: `Resolução: ${r.resolution} — Status: ${r.status}`,
-        amount: r.total ? -Math.abs(r.total) : 0,
-        link: `/receipt/${r.saleId}`,
-      });
-    });
-
-    return rows
-      .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+    returns.forEach((r) => rows.push({
+      kind: 'DEVOLUÇÃO',
+      timestamp: r.createdAt,
+      title: `Devolução #${String(r.id).slice(0, 5)} (Venda #${String(r.saleId).slice(0, 5)})`,
+      description: `Resolução: ${r.resolution} — Status: ${r.status}`,
+      amount: r.total ? -Math.abs(r.total) : 0,
+      link: `/receipt/${r.saleId}`,
+    }));
+    return rows.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
   }, [interactions, purchases, returns]);
 
-  const handlePrint = () => {
-    const content = printRef.current?.innerHTML || '';
-    const win = window.open('', '_blank');
-    win.document.write(`<html><head><title>Relatório do Cliente</title></head><body>${content}</body></html>`);
-    win.document.close();
-    win.print();
-  };
 
-  const handleAddInteraction = async () => {
-    if (!newInteraction.type || !newInteraction.notes) return;
-    setSavingInteraction(true);
-    try {
-      await api.addInteraction({ customerId: customer.id, ...newInteraction });
-      setNewInteraction({ type: '', notes: '' });
-      const updated = await api.getInteractionsByCustomerId(customer.id);
-      setInteractions(updated || []);
-      setActiveTab('interacoes'); // joga o foco para a aba de Interações após salvar
-    } catch (e) {
-      console.error('[Customer Modal] add interaction error', e);
-      alert('Falha ao salvar interação.');
-    } finally {
-      setSavingInteraction(false);
-    }
-  };
+  const handlePrint = () => window.print();
 
   if (!isOpen || !customer) return null;
 
@@ -168,36 +166,36 @@ const CustomerDetailsModal = ({ customer, isOpen, onClose }) => {
   return (
     <ModalWrapper isOpen={isOpen} onClose={onClose} title={`Cliente: ${customer.name}`}>
       <div className="space-y-4">
-        {/* Cabeçalho com badge de crédito */}
-        <Card className="!p-4">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div>
-              <p className="text-sm text-base-300">
-                {customer.cpfCnpj} · {customer.phone} · {customer.address}
-              </p>
-              {customer.email ? (
-                <p className="text-sm text-base-300">{customer.email}</p>
-              ) : null}
-            </div>
-            <div className="text-right">
-              <span
-                className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                  Number(credits.totalBalance) > 0
-                    ? 'bg-green-100 text-green-800'
-                    : 'bg-gray-100 text-gray-800'
-                }`}
-              >
-                Crédito disponível: {formatCurrency(credits.totalBalance)}
-              </span>
-            </div>
-          </div>
-        </Card>
+        {/* Controles fora da área imprimível */}
+        <div>
+          <Tabs tabs={tabs} active={activeTab} onChange={setActiveTab} />
+        </div>
 
-        {/* Abas */}
-        <Tabs tabs={tabs} active={activeTab} onChange={setActiveTab} />
+        {/* === ÁREA IMPRIMÍVEL === */}
+        <div className=" report-content space-y-4">
+          {/* Cabeçalho (será impresso) */}
+          <Card className="!p-4">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div>
+                <h3 className="font-semibold text-base-400 mb-1">{customer.name}</h3>
+                <p className="text-sm text-base-300">
+                  {customer.cpfCnpj} · {customer.phone} · {customer.address}
+                </p>
+                {customer.email ? <p className="text-sm text-base-300">{customer.email}</p> : null}
+              </div>
+              <div className="text-right">
+                <span
+                  className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                    Number(credits.totalBalance) > 0 ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                  }`}
+                >
+                  Crédito disponível: {formatCurrency(credits.totalBalance)}
+                </span>
+              </div>
+            </div>
+          </Card>
 
-        {/* Conteúdo das Abas */}
-        <div ref={printRef}>
+          {/* Conteúdo da aba ativa (impresso) */}
           {loading ? (
             <div className="flex justify-center p-10">
               <Spinner />
@@ -206,27 +204,23 @@ const CustomerDetailsModal = ({ customer, isOpen, onClose }) => {
             <>
               {activeTab === 'resumo' && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {/* mini resumo compras */}
+                  {/* resumo compras */}
                   <Card className="!p-4">
                     <h3 className="font-semibold text-base-400 mb-3">Resumo de Compras</h3>
                     <div className="text-sm text-base-300 space-y-1">
                       <p>Total de compras: <strong>{purchases.length}</strong></p>
                       <p>Última compra: <strong>{purchases[0]?.createdAt ? formatDate(purchases[0].createdAt) : '-'}</strong></p>
-                      <p>Valor total compras: <strong>
-                        {formatCurrency(purchases.reduce((s, p) => s + (p.total || 0), 0))}
-                      </strong></p>
+                      <p>Valor total compras: <strong>{formatCurrency(purchases.reduce((s, p) => s + (p.total || 0), 0))}</strong></p>
                     </div>
                   </Card>
 
-                  {/* mini resumo devoluções */}
+                  {/* resumo devoluções */}
                   <Card className="!p-4">
                     <h3 className="font-semibold text-base-400 mb-3">Resumo de Devoluções</h3>
                     <div className="text-sm text-base-300 space-y-1">
                       <p>Total de devoluções: <strong>{returns.length}</strong></p>
                       <p>Última devolução: <strong>{returns[0]?.createdAt ? formatDate(returns[0].createdAt) : '-'}</strong></p>
-                      <p>Valor total devolvido: <strong>
-                        {formatCurrency(returns.reduce((s, r) => s + (r.total || 0), 0))}
-                      </strong></p>
+                      <p>Valor total devolvido: <strong>{formatCurrency(returns.reduce((s, r) => s + (r.total || 0), 0))}</strong></p>
                     </div>
                   </Card>
 
@@ -251,11 +245,7 @@ const CustomerDetailsModal = ({ customer, isOpen, onClose }) => {
                               <tr key={c.id}>
                                 <td className="px-4 py-2 text-sm text-base-300">{formatDate(c.createdAt)}</td>
                                 <td className="px-4 py-2 text-sm">
-                                  {c.returnId ? (
-                                    <a className="text-primary-700 hover:underline" href={`/receipt/${c.returnId}`}>
-                                      Devolução #{String(c.returnId).slice(0, 5)}
-                                    </a>
-                                  ) : 'Crédito'}
+                                  {c.returnId ? <span>Devolução #{String(c.returnId).slice(0, 5)}</span> : 'Crédito'}
                                 </td>
                                 <td className="px-4 py-2 text-sm font-medium">{formatCurrency(c.amount)}</td>
                                 <td className="px-4 py-2 text-sm">{formatCurrency(c.balance)}</td>
@@ -289,13 +279,7 @@ const CustomerDetailsModal = ({ customer, isOpen, onClose }) => {
                           {credits.entries.map((c) => (
                             <tr key={c.id}>
                               <td className="px-4 py-2 text-sm text-base-300">{formatDate(c.createdAt)}</td>
-                              <td className="px-4 py-2 text-sm">
-                                {c.returnId ? (
-                                  <a className="text-primary-700 hover:underline" href={`/receipt/${c.returnId}`}>
-                                    Devolução #{String(c.returnId).slice(0, 5)}
-                                  </a>
-                                ) : 'Crédito'}
-                              </td>
+                              <td className="px-4 py-2 text-sm">{c.returnId ? <span>Devolução #{String(c.returnId).slice(0, 5)}</span> : 'Crédito'}</td>
                               <td className="px-4 py-2 text-sm font-medium">{formatCurrency(c.amount)}</td>
                               <td className="px-4 py-2 text-sm">{formatCurrency(c.balance)}</td>
                             </tr>
@@ -324,18 +308,17 @@ const CustomerDetailsModal = ({ customer, isOpen, onClose }) => {
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-base-200">
-                          {purchases.map((s) => (
-                            <tr key={s.id}>
-                              <td className="px-4 py-2 text-sm text-base-300">{formatDate(s.createdAt)}</td>
-                              <td className="px-4 py-2 text-sm">
-                                <a className="text-primary-700 hover:underline" href={`/receipt/${s.id}`}>
-                                  #{String(s.id).slice(0, 5)}
-                                </a>
-                              </td>
-                              <td className="px-4 py-2 text-sm font-medium">{formatCurrency(s.total)}</td>
-                              <td className="px-4 py-2 text-sm">{s.status}</td>
-                            </tr>
-                          ))}
+                          {purchases.map((s) => {
+                            const st = saleFinanceStatus(s);
+                            return (
+                              <tr key={s.id}>
+                                <td className="px-4 py-2 text-sm text-base-300">{formatDate(s.createdAt)}</td>
+                                <td className="px-4 py-2 text-sm">#{String(s.id).slice(0, 5)}</td>
+                                <td className="px-4 py-2 text-sm font-medium">{formatCurrency(s.total)}</td>
+                                <td className="px-4 py-2 text-sm"><span className={statusBadgeClass(st)}>{st}</span></td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -364,11 +347,7 @@ const CustomerDetailsModal = ({ customer, isOpen, onClose }) => {
                           {returns.map((r) => (
                             <tr key={r.id}>
                               <td className="px-4 py-2 text-sm text-base-300">{formatDate(r.createdAt)}</td>
-                              <td className="px-4 py-2 text-sm">
-                                <a className="text-primary-700 hover:underline" href={`/receipt/${r.saleId}`}>
-                                  #{String(r.saleId).slice(0, 5)}
-                                </a>
-                              </td>
+                              <td className="px-4 py-2 text-sm">#{String(r.saleId).slice(0, 5)}</td>
                               <td className="px-4 py-2 text-sm">{r.resolution}</td>
                               <td className="px-4 py-2 text-sm font-medium">{formatCurrency(r.total)}</td>
                               <td className="px-4 py-2 text-sm">{r.status}</td>
@@ -411,35 +390,7 @@ const CustomerDetailsModal = ({ customer, isOpen, onClose }) => {
                     )}
                   </Card>
 
-                  <Card className="!p-4">
-                    <h3 className="font-semibold text-base-400 mb-3">Nova Interação</h3>
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block mb-1 text-sm font-medium text-base-300">Tipo</label>
-                        <select
-                          value={newInteraction.type}
-                          onChange={(e) => setNewInteraction({ ...newInteraction, type: e.target.value })}
-                          className="w-full p-2 bg-white border border-base-200 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-base-400"
-                        >
-                          <option value="" disabled>Selecione um tipo...</option>
-                          {interactionTypes.map((type) => (
-                            <option key={type} value={type}>{type}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <Input
-                        name="notes"
-                        label="Notas"
-                        value={newInteraction.notes}
-                        onChange={(e) => setNewInteraction({ ...newInteraction, notes: e.target.value })}
-                      />
-                      <div className="flex justify-end">
-                        <Button onClick={handleAddInteraction} disabled={savingInteraction}>
-                          {savingInteraction ? 'Salvando...' : 'Salvar'}
-                        </Button>
-                      </div>
-                    </div>
-                  </Card>
+                  {/* Form (não imprime; fica fora do report-content/abaixo) */}
                 </div>
               )}
 
@@ -468,14 +419,8 @@ const CustomerDetailsModal = ({ customer, isOpen, onClose }) => {
                               <td className="px-4 py-2 text-sm">{h.kind}</td>
                               <td className="px-4 py-2 text-sm">{h.title}</td>
                               <td className="px-4 py-2 text-sm">{h.description}</td>
-                              <td className="px-4 py-2 text-sm font-medium">
-                                {h.amount == null ? '-' : formatCurrency(h.amount)}
-                              </td>
-                              <td className="px-4 py-2 text-sm">
-                                {h.link ? (
-                                  <a className="text-primary-700 hover:underline" href={h.link}>Abrir</a>
-                                ) : '-'}
-                              </td>
+                              <td className="px-4 py-2 text-sm font-medium">{h.amount == null ? '-' : formatCurrency(h.amount)}</td>
+                              <td className="px-4 py-2 text-sm">{h.link ? 'Abrir' : '-'}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -487,16 +432,64 @@ const CustomerDetailsModal = ({ customer, isOpen, onClose }) => {
             </>
           )}
         </div>
+        {/* === /ÁREA IMPRIMÍVEL === */}
 
-        {/* Rodapé do modal */}
-        <div className="flex justify-between pt-2">
-          <Button onClick={handlePrint} className="bg-blue-600 hover:bg-blue-700 text-white">
-            Imprimir
-          </Button>
-          <Button onClick={onClose} className="bg-gray-500 hover:bg-gray-600 text-white">
-            Fechar
-          </Button>
+        {/* Ações (não imprimir) */}
+        <div className="flex justify-between pt-2 print:hidden">
+          <Button onClick={handlePrint}>Imprimir</Button>
+          <Button onClick={onClose} className="bg-gray-500 hover:bg-gray-600">Fechar</Button>
         </div>
+
+        {/* Form da aba Interações (fora da impressão) */}
+        {activeTab === 'interacoes' && (
+          <Card className="!p-4 print:hidden">
+            <h3 className="font-semibold text-base-400 mb-3">Nova Interação</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block mb-1 text-sm font-medium text-base-300">Tipo</label>
+                <select
+                  value={newInteraction.type}
+                  onChange={(e) => setNewInteraction({ ...newInteraction, type: e.target.value })}
+                  className="w-full p-2 bg-white border border-base-200 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-base-400"
+                >
+                  <option value="" disabled>Selecione um tipo...</option>
+                  {['Telefone','E-mail','WhatsApp','Visita Presencial','Redes Sociais','Outro'].map((type) => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              </div>
+              <Input
+                name="notes"
+                label="Notas"
+                value={newInteraction.notes}
+                onChange={(e) => setNewInteraction({ ...newInteraction, notes: e.target.value })}
+              />
+              <div className="flex justify-end">
+                <Button
+                  onClick={async () => {
+                    if (!newInteraction.type || !newInteraction.notes) return;
+                    setSavingInteraction(true);
+                    try {
+                      await api.addInteraction({ customerId: customer.id, ...newInteraction });
+                      setNewInteraction({ type: '', notes: '' });
+                      const updated = await api.getInteractionsByCustomerId(customer.id);
+                      setInteractions(updated || []);
+                      setActiveTab('interacoes');
+                    } catch (e) {
+                      console.error('[Customer Modal] add interaction error', e);
+                      alert('Falha ao salvar interação.');
+                    } finally {
+                      setSavingInteraction(false);
+                    }
+                  }}
+                  disabled={savingInteraction}
+                >
+                  {savingInteraction ? 'Salvando...' : 'Salvar'}
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
       </div>
     </ModalWrapper>
   );

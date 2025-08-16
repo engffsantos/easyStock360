@@ -272,50 +272,50 @@ const SalesPage = ({ onNavigateToReceipt }) => {
         </div>
       </Card>
 
-    <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-base-200">
-        <thead className="bg-white">
-          <tr>
-            <th className="px-6 py-3 text-left text-xs  uppercase">Data</th>
-            <th className="px-6 py-3 text-left text-xs  uppercase">Cliente</th>
-            <th className="px-6 py-3 text-left text-xs  uppercase">Itens</th>
-            <th className="px-6 py-3 text-left text-xs  uppercase">Total</th>
-            <th className="px-6 py-3 text-left text-xs  uppercase">Ações</th>
-          </tr>
-        </thead>
-        <tbody className="bg-white divide-y divide-base-200">
-          {filteredSales.length > 0 ? (
-            filteredSales.map((sale) => (
-              <tr
-                key={sale.id}
-                className={sale.status === 'CANCELLED' ? 'opacity-50 line-through' : ''}
-              >
-                <td className="px-6 py-4 text-sm ">{formatDate(sale.createdAt)}</td>
-                <td className="px-6 py-4 text-sm text-base-400">{sale.customerName || 'Consumidor Final'}</td>
-                <td className="px-6 py-4 text-sm ">{(sale.items || []).length}</td>
-                <td className="px-6 py-4 text-sm font-bold text-primary-800">{formatCurrency(sale.total)}</td>
-                <td className="px-6 py-4 flex flex-wrap gap-2">
-                  <PrimaryButton className="!py-1 !px-2" onClick={() => onNavigateToReceipt(sale.id)}>
-                    Ver Recibo
-                  </PrimaryButton>
-                  {sale.status !== 'CANCELLED' && (
-                    <DangerButton className="!py-1 !px-2" onClick={() => handleCancelSale(sale.id)}>
-                      Cancelar
-                    </DangerButton>
-                  )}
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-base-200">
+          <thead className="bg-white">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs  uppercase">Data</th>
+              <th className="px-6 py-3 text-left text-xs  uppercase">Cliente</th>
+              <th className="px-6 py-3 text-left text-xs  uppercase">Itens</th>
+              <th className="px-6 py-3 text-left text-xs  uppercase">Total</th>
+              <th className="px-6 py-3 text-left text-xs  uppercase">Ações</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-base-200">
+            {filteredSales.length > 0 ? (
+              filteredSales.map((sale) => (
+                <tr
+                  key={sale.id}
+                  className={sale.status === 'CANCELLED' ? 'opacity-50 line-through' : ''}
+                >
+                  <td className="px-6 py-4 text-sm ">{formatDate(sale.createdAt)}</td>
+                  <td className="px-6 py-4 text-sm text-base-400">{sale.customerName || 'Consumidor Final'}</td>
+                  <td className="px-6 py-4 text-sm ">{(sale.items || []).length}</td>
+                  <td className="px-6 py-4 text-sm font-bold text-primary-800">{formatCurrency(sale.total)}</td>
+                  <td className="px-6 py-4 flex flex-wrap gap-2">
+                    <PrimaryButton className="!py-1 !px-2" onClick={() => onNavigateToReceipt(sale.id)}>
+                      Ver Recibo
+                    </PrimaryButton>
+                    {sale.status !== 'CANCELLED' && (
+                      <DangerButton className="!py-1 !px-2" onClick={() => handleCancelSale(sale.id)}>
+                        Cancelar
+                      </DangerButton>
+                    )}
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="5" className="text-center py-12">
+                  Nenhuma venda encontrada para o período.
                 </td>
               </tr>
-            ))
-          ) : (
-            <tr>
-              <td colSpan="5" className="text-center py-12">
-                Nenhuma venda encontrada para o período.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+            )}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 
@@ -461,12 +461,22 @@ const SalesPage = ({ onNavigateToReceipt }) => {
         onClose={handleCloseModal}
         title={editingTransaction ? 'Editar Orçamento' : 'Registrar Nova Transação'}
       >
-        <SaleForm
-          transactionToEdit={editingTransaction}
-          onSave={handleSaveSuccess}
-          onClose={handleCloseModal}
-          isSaving={false}
-        />
+        {/* ÁREA IMPRIMÍVEL DO FORMULÁRIO */}
+        <div className="modal-panel bg-white rounded-xl w-full max-w-lg p-6 relative">
+          <SaleForm
+              transactionToEdit={editingTransaction}
+              onSave={handleSaveSuccess}
+              onClose={handleCloseModal}
+              isSaving={false}
+          />
+        </div>
+
+        {/* Ações auxiliares que NÃO devem ir para a impressão */}
+        <div className="mt-4 flex justify-end gap-2 print:hidden">
+          <PrimaryButton className="!py-1 !px-2" onClick={() => window.print()}>
+            Imprimir
+          </PrimaryButton>
+        </div>
       </ModalWrapper>
 
       {/* Modal de conversão */}
@@ -476,6 +486,8 @@ const SalesPage = ({ onNavigateToReceipt }) => {
           onClose={() => setQuoteToConvert(null)}
           title="Converter Orçamento"
         >
+          {/* Se futuramente quiser imprimir esse conteúdo, basta mover o wrapper report-content
+              para dentro. Por ora mantemos a conversão como formulário (sem impressão). */}
           <div className="w-full max-w-3xl md:max-w-4xl lg:max-w-5xl mx-auto">
             <div className="space-y-4 max-h-[80vh] overflow-y-auto px-1">
               <p>Confirme os detalhes de pagamento para converter este orçamento em uma venda.</p>

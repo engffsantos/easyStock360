@@ -1,113 +1,126 @@
 // frontend/src/pages/CustomersPage.jsx
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/api';
-import { Card, Input, ModalWrapper, Spinner } from '../components/common';
-import { PlusIcon, EditIcon, TrashIcon, SearchIcon, MessageSquareIcon } from '../components/icons';
-import CustomerDetailsModal from '../components/CustomerDetailsModal';
+import { Card, Button, Input, Spinner, ModalWrapper } from '../components/common';
+import CustomerDetailsPage from './CustomerDetailsPage';
 import CustomerForm from './CustomerForm';
-
-const PrimaryButton = ({ children, onClick, type = 'button', className = '', ...props }) => (
-  <button
-    type={type}
-    onClick={onClick}
-    className={`px-4 py-2 rounded text-white flex items-center gap-2 ${className}`}
-    style={{ backgroundColor: 'rgb(var(--color-primary-600))' }}
-    {...props}
-  >
-    {children}
-  </button>
-);
-
+import { PlusIcon, EditIcon, TrashIcon, SearchIcon, MessageSquareIcon } from '../components/icons';
 const CustomersPage = () => {
+  // Dados
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError]   = useState(null);
+
+  // UI/Busca
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Navegação de tela
+  const [view, setView] = useState('list'); // 'list' | 'details'
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+
+  // Modal de criar/editar
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
 
-  const fetchCustomers = useCallback(async () => {
-    try {
-      setLoading(true);
-      const data = await api.getCustomers();
-      setCustomers(data);
-    } catch {
-      setError('Falha ao carregar os clientes.');
-    } finally {
-      setLoading(false);
-    }
+  // Carrega clientes
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoading(true);
+        const data = await api.getCustomers();
+        setCustomers(Array.isArray(data) ? data : []);
+        setError(null);
+      } catch (e) {
+        console.error('[CustomersPage] load error', e);
+        setError('Falha ao carregar clientes.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
   }, []);
 
-  useEffect(() => {
-    fetchCustomers();
-  }, [fetchCustomers]);
+  // Busca
+  const filtered = useMemo(() => {
+    const q = (searchTerm || '').toLowerCase().trim();
+    if (!q) return customers;
+    return customers.filter((c) =>
+      [c.name, c.cpfCnpj, c.email /*, c.phone*/] // foco em nome/CPF-CNPJ/email como você pediu
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q))
+    );
+  }, [customers, searchTerm]);
 
-  const handleAddCustomer = () => {
+  // Ações
+  const openDetails = (customer) => {
+    setSelectedCustomer(customer);
+    setView('details');
+  };
+
+  const handleBackFromDetails = () => {
+    setView('list');
+    setSelectedCustomer(null);
+  };
+
+  const openCreate = () => {
     setEditingCustomer(null);
     setIsModalOpen(true);
   };
 
-  const handleEditCustomer = (customer) => {
+  const openEdit = (customer) => {
     setEditingCustomer(customer);
     setIsModalOpen(true);
   };
 
-  const handleDeleteCustomer = async (id) => {
-    if (window.confirm('Tem certeza que deseja remover este cliente?')) {
-      try {
-        await api.deleteCustomer(id);
-        await fetchCustomers();
-      } catch {
-        alert('Falha ao remover o cliente.');
-      }
-    }
-  };
-
-  const handleSaveCustomer = async (data) => {
-    setIsSaving(true);
+  const handleSaveCustomer = async (formData) => {
     try {
-      if (editingCustomer) {
-        await api.updateCustomer(editingCustomer.id, data);
+      setIsSaving(true);
+      if (formData?.id) {
+        await api.updateCustomer(formData.id, formData);
       } else {
-        await api.addCustomer(data);
+        await api.createCustomer(formData);
       }
+      // Recarrega lista
+      const data = await api.getCustomers();
+      setCustomers(Array.isArray(data) ? data : []);
+      // Fecha modal
       setIsModalOpen(false);
-      await fetchCustomers();
+      setEditingCustomer(null);
     } catch (e) {
-      if (e.response?.status === 409) {
-        alert('Já existe um cliente com este CPF/CNPJ.');
-      } else if (e.response?.data?.error) {
-        alert(e.response.data.error);
-      } else {
-        alert('Falha ao salvar o cliente.');
-      }
+      console.error('[CustomersPage] save customer error', e);
+      alert('Falha ao salvar cliente.');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const filteredCustomers = useMemo(() => {
-    return customers.filter((c) => {
-      const term = searchTerm.toLowerCase();
-      return (
-        c.name.toLowerCase().includes(term) ||
-        c.cpfCnpj.toLowerCase().includes(term) ||
-        (c.email && c.email.toLowerCase().includes(term))
-      );
-    });
-  }, [customers, searchTerm]);
+  // ===========================================
+  // Render: quando em detalhes, só a página de detalhes
+  // ===========================================
+  if (view === 'details' && selectedCustomer) {
+    return (
+      <CustomerDetailsPage
+        customer={selectedCustomer}
+        onBack={handleBackFromDetails}
+      />
+    );
+  }
 
+  // ===========================================
+  // Render: LISTA
+  // ===========================================
   return (
-    <>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-base-400">Clientes</h1>
-        <PrimaryButton onClick={handleAddCustomer}>
-          <PlusIcon /> Adicionar Cliente
-        </PrimaryButton>
+    <div className="space-y-4">
+      {/* Header e botão de novo cliente (fora da impressão) */}
+      <div className="flex items-center justify-between gap-2 print:hidden">
+        <h2 className="text-base-400 text-xl font-semibold">Clientes</h2>
+        <div className="flex items-center gap-2">
+          <Button onClick={openCreate}>Novo Cliente</Button>
+        </div>
       </div>
 
+      {/* ====== Filtro exatamente como solicitado ====== */}
       <Card className="mb-6">
         <div className="relative flex-grow">
           <Input
@@ -124,59 +137,63 @@ const CustomersPage = () => {
         </div>
       </Card>
 
-      <Card>
-        {loading && <div className="flex justify-center p-12"><Spinner /></div>}
-        {error && <div className="text-center text-danger p-12">{error}</div>}
-        {!loading && !error && (
+      <Card className="!p-0">
+        {loading ? (
+          <div className="p-8 flex justify-center"><Spinner /></div>
+        ) : error ? (
+          <div className="p-4 text-red-600">{error}</div>
+        ) : filtered.length === 0 ? (
+          <div className="p-4 text-base-300">Nenhum cliente encontrado.</div>
+        ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-base-200">
-              <thead className="bg-white">
+              <thead className="bg-base-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase">Nome</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase">CPF/CNPJ</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase">Telefone</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase">E-mail</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase">Endereço</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase">Ações</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase">Nome</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase">CPF/CNPJ</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase">E-mail</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase print:hidden">Ações</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-base-200">
-                {filteredCustomers.length > 0 ? filteredCustomers.map((customer) => (
-                  <tr key={customer.id}>
-                    <td className="px-6 py-4 text-sm font-medium text-base-400">{customer.name}</td>
-                    <td className="px-6 py-4 text-sm">{customer.cpfCnpj}</td>
-                    <td className="px-6 py-4 text-sm">{customer.phone}</td>
-                    <td className="px-6 py-4 text-sm">{customer.email || '-'}</td>
-                    <td className="px-6 py-4 text-sm truncate max-w-xs">{customer.address}</td>
-                    <td className="px-6 py-4 text-sm font-medium">
+                {filtered.map((c) => (
+                  <tr key={c.id}>
+                    <td className="px-4 py-2 text-sm">{c.name}</td>
+                    <td className="px-4 py-2 text-sm text-base-300">{c.cpfCnpj || '-'}</td>
+                    <td className="px-4 py-2 text-sm text-base-300">{c.email || '-'}</td>
+                    <td className="px-4 py-2 text-sm print:hidden">
                       <div className="flex gap-2">
-                        <button onClick={() => handleEditCustomer(customer)} title="Editar"><EditIcon /></button>
-                        <button onClick={() => handleDeleteCustomer(customer.id)} className="text-danger" title="Remover"><TrashIcon /></button>
-                        <button onClick={() => setSelectedCustomer(customer)} title="Ver Detalhes"><MessageSquareIcon /></button>
+                        <Button title="Ver detalhes" onClick={() => openDetails(c)}>
+                          Ver detalhes
+                        </Button>
+                        <Button title="Editar" onClick={() => openEdit(c)}>
+                          Editar
+                        </Button>
                       </div>
                     </td>
                   </tr>
-                )) : (
-                  <tr>
-                    <td colSpan={6} className="text-center py-12">Nenhum cliente encontrado.</td>
-                  </tr>
-                )}
+                ))}
               </tbody>
             </table>
           </div>
         )}
       </Card>
 
-      <ModalWrapper isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingCustomer ? 'Editar Cliente' : 'Adicionar Novo Cliente'}>
-        <CustomerForm customer={editingCustomer} onSave={handleSaveCustomer} onClose={() => setIsModalOpen(false)} isSaving={isSaving} />
+      {/* ====== Modal de Criar/Editar exatamente como solicitado ====== */}
+      <ModalWrapper
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={editingCustomer ? 'Editar Cliente' : 'Adicionar Novo Cliente'}
+      >
+        {/* O formulário de cadastro/edição não é um documento imprimível; deixamos sem report-content */}
+        <CustomerForm
+          customer={editingCustomer}
+          onSave={handleSaveCustomer}
+          onClose={() => setIsModalOpen(false)}
+          isSaving={isSaving}
+        />
       </ModalWrapper>
-
-      <CustomerDetailsModal
-        customer={selectedCustomer}
-        isOpen={!!selectedCustomer}
-        onClose={() => setSelectedCustomer(null)}
-      />
-    </>
+    </div>
   );
 };
 

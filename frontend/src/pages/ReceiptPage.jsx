@@ -126,7 +126,7 @@ const ReceiptPage = ({ transactionId, onBack }) => {
     : null;
 
   return (
-    <div className="max-w-4xl mx-auto bg-white p-8 shadow print:shadow-none print:p-0">
+    <div className="receipt-content max-w-4xl mx-auto bg-white p-8 shadow print:shadow-none print:p-0">
       <style>{`
         @page { margin: 14mm; }
         @media print {
