@@ -93,8 +93,8 @@ const Button = ({ children, onClick, type = 'button', variant = 'primary', class
 };
 
 const ReportCard = ({ title, right, children }) => (
-  <Card className="mb-6">
-    <div className="flex items-center justify-between mb-4">
+  <Card className="mb-6 ">
+    <div className="flex items-center justify-between mb-4 ">
       <h2 className="text-xl font-bold text-base-400">{title}</h2>
       {/* Oculta ações no modo de impressão */}
       {right ? <div className="print:hidden">{right}</div> : null}
@@ -109,7 +109,7 @@ const ReportTable = ({ headers, children }) => (
       <thead className="bg-base-100">
         <tr>
           {headers.map((h, i) => (
-            <th key={i} className="p-2 border-b border-base-200 text-left font-medium text-base-400 uppercase text-xs">
+            <th key={i} className="p-2 border-b border-base-200 text-left font-medium text-base-600 uppercase text-xs">
               {h}
             </th>
           ))}
@@ -345,7 +345,7 @@ const ReportsPage = () => {
 
   const FiltersBar = (
     <Card>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="print:grid print:grid-cols-2 print:gap-4  grid grid-cols-1 md:grid-cols-2 gap-4">
         <Input type="date" label="Data Inicial" value={start} onChange={(e) => setStart(e.target.value)} />
         <Input type="date" label="Data Final" value={end} onChange={(e) => setEnd(e.target.value)} />
       </div>
@@ -368,7 +368,7 @@ const ReportsPage = () => {
     <>
       {FiltersBar}
       <ReportCard title="KPIs de Vendas">
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="print:grid print:grid-cols-12 print:gap-4 mb-4 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <StatBadge label="Vendas (qtd)" value={salesInPeriod.length} />
           <StatBadge label="Receita (R$)" value={formatCurrency(sum(salesInPeriod.map((s) => s.total || 0)))} />
           <StatBadge
@@ -428,7 +428,7 @@ const ReportsPage = () => {
     <>
       {FiltersBar}
       <ReportCard title="A Receber por Status (parcelas no período)">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="print:grid print:grid-cols-3 print:gap-4 mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
           <StatBadge label="Recebido" value={formatCurrency(receivableByStatus.PAGO || 0)} />
           <StatBadge label="Pendente" value={formatCurrency(receivableByStatus.PENDENTE || 0)} />
           <StatBadge label="Vencido" value={formatCurrency(receivableByStatus.VENCIDO || 0)} danger />
@@ -539,7 +539,7 @@ const ReportsPage = () => {
     <>
       {FiltersBar}
       <ReportCard title="Resumo do Funil (QUOTE → COMPLETED)">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="print:grid print:grid-cols-12 print:gap-4 mb-4 grid grid-cols-1 md:grid-cols-4 gap-4">
           <StatBadge label="Orçamentos" value={conv.qCount} />
           <StatBadge label="Vendas" value={conv.sCount} />
           <StatBadge label="Conversão (%)" value={`${conv.rate.toFixed(1)}%`} />
@@ -675,7 +675,7 @@ const ReportsPage = () => {
       </Card>
 
       <ReportCard title="Resumo de Estoque">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="print:grid print:grid-cols-3 print:gap-4 grid grid-cols-1 md:grid-cols-3 gap-4">
           <StatBadge label="Itens filtrados" value={filteredProducts.length} />
           <StatBadge label="Valor de Estoque (custo)" value={formatCurrency(inventoryValue)} />
           <StatBadge label="Rupturas (<= mínimo)" value={lowStockCount} danger={lowStockCount > 0} />
@@ -792,7 +792,7 @@ const ReportsPage = () => {
     <>
       {FiltersBar}
       <ReportCard title="Indicadores Operacionais">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="print:grid print:grid-cols-3  grid grid-cols-1 md:grid-cols-3 gap-4">
           <StatBadge label="Devoluções" value={returnsInPeriod.length} danger={returnsInPeriod.length > 0} />
           <StatBadge
             label="% Devolução vs Vendas"
@@ -950,7 +950,7 @@ const ReportsPage = () => {
           <button
             key={t.key}
             className={`text-sm font-medium ${
-              activeTab === t.key ? 'text-primary-600 border-b-2 border-primary-600' : 'text-base-400'
+              activeTab === t.key ? 'bg-base-300 text-primary-500 border-b-2 border-primary-600' : 'text-base-100'
             }`}
             onClick={() => setActiveTab(t.key)}
           >

@@ -353,125 +353,133 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
         <div className="mb-4">
           <label className="block mb-1 text-sm ">Tipo de operação</label>
           <div className="flex gap-4">
-            <label className="flex items-center gap-2">
+            <label className="flex items-center">
               <input
-                type="radio"
-                value="QUOTE"
-                checked={formType === 'QUOTE'}
-                onChange={() => setFormType('QUOTE')}
+                  type="radio"
+                  value="QUOTE"
+                  checked={formType === 'QUOTE'}
+                  onChange={() => setFormType('QUOTE')}
               />
               Orçamento
             </label>
             <label className="flex items-center gap-2">
               <input
-                type="radio"
-                value="COMPLETED"
-                checked={formType === 'COMPLETED'}
-                onChange={() => setFormType('COMPLETED')}
+                  type="radio"
+                  value="COMPLETED"
+                  checked={formType === 'COMPLETED'}
+                  onChange={() => setFormType('COMPLETED')}
               />
               Venda Direta
             </label>
           </div>
           {formType === 'QUOTE' && (
-            <p className="mt-2 text-xs text-base-400">
-              Este orçamento terá validade de <strong>10 dias</strong> a partir da emissão.
-            </p>
+              <p className="mt-2 text-xs text-base-400">
+                Este orçamento terá validade de <strong>10 dias</strong> a partir da emissão.
+              </p>
           )}
         </div>
 
         <div>
-          <label className="block mb-1 text-sm ">Cliente</label>
-          <div className="flex gap-2 items-center">
-            <Select
-              options={customerOptions}
-              onChange={(selected) => setSelectedCustomerId(selected?.value || '')}
-              value={customerOptions.find(o => o.value === selectedCustomerId) || null}
-              placeholder="Selecione o cliente"
-              isClearable
-              filterOption={productFilter}
-              className="w-full"
-            />
-            <PrimaryButton onClick={() => setIsCustomerModalOpen(true)}>
-              <span className="inline-flex items-center gap-2">
-                <PlusIcon /> Novo Cliente
-              </span>
+          <label className="block mb-1 text-sm">Cliente</label>
+
+          <div className="grid grid-cols-6 gap-2 items-center">
+            <div className="col-span-4">
+              <Select
+                  options={customerOptions}
+                  onChange={(selected) => setSelectedCustomerId(selected?.value || '')}
+                  value={customerOptions.find(o => o.value === selectedCustomerId) || null}
+                  placeholder="Selecione o cliente"
+                  isClearable
+                  filterOption={productFilter}
+                  className="w-full"
+              />
+            </div>
+
+            <PrimaryButton
+                className="col-span-2 w-full"
+                onClick={() => setIsCustomerModalOpen(true)}
+            >
+      <span className="inline-flex items-center gap-2">
+        <PlusIcon/> Novo Cliente
+      </span>
             </PrimaryButton>
           </div>
         </div>
 
         <ModalWrapper
-          isOpen={isCustomerModalOpen}
-          onClose={() => setIsCustomerModalOpen(false)}
-          title="Adicionar Cliente"
+            isOpen={isCustomerModalOpen}
+            onClose={() => setIsCustomerModalOpen(false)}
+            title="Adicionar Cliente"
         >
           <CustomerForm
-            customer={null}
-            onSave={handleCreateCustomer}
-            onClose={() => setIsCustomerModalOpen(false)}
-            isSaving={isCreatingCustomer}
+              customer={null}
+              onSave={handleCreateCustomer}
+              onClose={() => setIsCustomerModalOpen(false)}
+              isSaving={isCreatingCustomer}
           />
         </ModalWrapper>
 
         {formType === 'COMPLETED' && (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-              <div>
-                <label className="block mb-1 text-sm ">Forma de pagamento</label>
-                <select
-                  value={paymentMethod}
-                  onChange={e => {
-                    setPaymentMethod(e.target.value);
-                    setInstallments(1);
-                    setBoletoDueDates(['']);
-                  }}
-                  className="w-full p-2 border rounded"
-                >
-                  {Object.entries(PAYMENT_METHODS).map(([k, v]) => (
-                    <option key={k} value={k}>{v}</option>
-                  ))}
-                </select>
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                <div>
+                  <label className="block mb-1 text-sm ">Forma de pagamento</label>
+                  <select
+                      value={paymentMethod}
+                      onChange={e => {
+                        setPaymentMethod(e.target.value);
+                        setInstallments(1);
+                        setBoletoDueDates(['']);
+                      }}
+                      className="w-full p-2 border rounded"
+                  >
+                    {Object.entries(PAYMENT_METHODS).map(([k, v]) => (
+                        <option key={k} value={k}>{v}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block mb-1 text-sm ">Parcelas</label>
+                  <Input
+                      type="number"
+                      min="1"
+                      value={installments}
+                      onChange={e => setInstallments(parseInt(e.target.value) || 1)}
+                      disabled={!['CARTAO_CREDITO', 'BOLETO'].includes(paymentMethod)}
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block mb-1 text-sm ">Parcelas</label>
-                <Input
-                  type="number"
-                  min="1"
-                  value={installments}
-                  onChange={e => setInstallments(parseInt(e.target.value) || 1)}
-                  disabled={!['CARTAO_CREDITO', 'BOLETO'].includes(paymentMethod)}
-                />
-              </div>
-            </div>
 
-            {paymentMethod === 'BOLETO' && (
-              <div className="mt-4 border rounded p-3 bg-white">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <h4 className="font-semibold">Vencimentos do Boleto</h4>
-                  <div className="flex gap-2">
-                    <SecondaryButton onClick={autofillMonthlyBoleto}>
-                      Preencher mensalmente
-                    </SecondaryButton>
-                  </div>
-                </div>
-                <p className="text-sm text-base-400 mb-2">
-                  Informe o <strong>vencimento</strong> de cada parcela. Os valores serão distribuídos automaticamente.
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {Array.from({ length: Math.max(1, Number(installments) || 1) }).map((_, i) => (
-                    <div key={i}>
-                      <label className="block text-sm mb-1">Parcela #{i + 1} - Vencimento</label>
-                      <input
-                        type="date"
-                        className="w-full p-2 border rounded"
-                        value={boletoDueDates[i] || ''}
-                        onChange={(e) => handleChangeBoletoDate(i, e.target.value)}
-                      />
+              {paymentMethod === 'BOLETO' && (
+                  <div className="mt-4 border rounded p-3 bg-white">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <h4 className="font-semibold">Vencimentos do Boleto</h4>
+                      <div className="flex gap-2">
+                        <SecondaryButton onClick={autofillMonthlyBoleto}>
+                          Preencher mensalmente
+                        </SecondaryButton>
+                      </div>
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </>
+                    <p className="text-sm text-base-400 mb-2">
+                      Informe o <strong>vencimento</strong> de cada parcela. Os valores serão distribuídos
+                      automaticamente.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {Array.from({length: Math.max(1, Number(installments) || 1)}).map((_, i) => (
+                          <div key={i}>
+                            <label className="block text-sm mb-1">Parcela #{i + 1} - Vencimento</label>
+                            <input
+                                type="date"
+                                className="w-full p-2 border rounded"
+                                value={boletoDueDates[i] || ''}
+                                onChange={(e) => handleChangeBoletoDate(i, e.target.value)}
+                            />
+                          </div>
+                      ))}
+                    </div>
+                  </div>
+              )}
+            </>
         )}
       </Card>
 
@@ -482,17 +490,17 @@ const SaleForm = ({ transactionToEdit, onSave, onClose, isSaving }) => {
           <div className="md:col-span-3">
             <label className="block mb-1 text-sm">Produto (digite nome ou SKU)</label>
             <Select
-              options={productOptions}
-              value={
-                currentItem.productId
-                  ? productOptions.find(o => o.value === currentItem.productId) || null
-                  : null
-              }
-              onChange={(opt) => {
-                const p = opt?.raw;
-                if (!p) {
-                  setCurrentItem(prev => ({ ...prev, productId: '' }));
-                  return;
+                options={productOptions}
+                value={
+                  currentItem.productId
+                      ? productOptions.find(o => o.value === currentItem.productId) || null
+                      : null
+                }
+                onChange={(opt) => {
+                  const p = opt?.raw;
+                  if (!p) {
+                    setCurrentItem(prev => ({...prev, productId: ''}));
+                    return;
                 }
                 if (formType === 'COMPLETED' && p.quantity <= 0) {
                   setItemError('Produto sem estoque para venda direta.');

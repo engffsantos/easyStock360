@@ -681,7 +681,7 @@ const FinancialPage = () => {
                       )}
                       {canPay && (
                         <PrimaryButton onClick={() => handleMarkAsPaid(entry.id)}>
-                          <DollarSignIcon className="w-4 h-4" /> Pagar
+                          Pagar
                         </PrimaryButton>
                       )}
 
@@ -699,8 +699,8 @@ const FinancialPage = () => {
 
                       {/* Excluir (somente despesa manual e não paga) */}
                       {canDelete && (
-                        <button onClick={() => handleDeleteExpense(entry.id)} className="text-danger" title="Excluir">
-                          <TrashIcon />
+                        <button onClick={() => handleDeleteExpense(entry.id)} className="bg-red-600" title="Excluir">
+                          Excluir
                         </button>
                       )}
 
@@ -775,8 +775,8 @@ const FinancialPage = () => {
     };
 
     return (
-      <Card className="!p-4 mb-4">
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+      <Card className="!p-4 mb-4 ">
+        <div className=" grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
           <div className="md:col-span-2">
             <Input
               id="search"
@@ -835,7 +835,7 @@ const FinancialPage = () => {
     const data = filterData('RECEITA');
     return (
       <div className="space-y-4">
-        <div className="flex justify-between items-center">
+        <div className="block justify-between items-center">
           <FiltersBar currentType="RECEITA" />
         </div>
         <div className="text-right -mt-2">
@@ -850,7 +850,7 @@ const FinancialPage = () => {
     const data = filterData('DESPESA');
     return (
       <div className="space-y-6">
-        <div className="flex justify-between">
+        <div className="block justify-between">
           <FiltersBar currentType="DESPESA" />
           <div className="hidden" />
         </div>

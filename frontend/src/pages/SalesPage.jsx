@@ -462,7 +462,7 @@ const SalesPage = ({ onNavigateToReceipt }) => {
         title={editingTransaction ? 'Editar Orçamento' : 'Registrar Nova Transação'}
       >
         {/* ÁREA IMPRIMÍVEL DO FORMULÁRIO */}
-        <div className="modal-panel bg-white rounded-xl w-full max-w-lg p-6 relative">
+        <div className="modal-panel bg-white rounded-xl w-full p-6 relative">
           <SaleForm
               transactionToEdit={editingTransaction}
               onSave={handleSaveSuccess}
@@ -471,12 +471,6 @@ const SalesPage = ({ onNavigateToReceipt }) => {
           />
         </div>
 
-        {/* Ações auxiliares que NÃO devem ir para a impressão */}
-        <div className="mt-4 flex justify-end gap-2 print:hidden">
-          <PrimaryButton className="!py-1 !px-2" onClick={() => window.print()}>
-            Imprimir
-          </PrimaryButton>
-        </div>
       </ModalWrapper>
 
       {/* Modal de conversão */}

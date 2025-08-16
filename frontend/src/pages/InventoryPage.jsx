@@ -286,8 +286,8 @@ const InventoryPage = () => {
                       </td>
                       <td className="px-6 py-4 text-sm text-right font-medium">
                         <div className="flex gap-2">
-                          <button onClick={() => handleEditProduct(product)} className="text-primary-700 hover:text-primary-600" title="Editar"><EditIcon /></button>
-                          <button onClick={() => handleDeleteProduct(product.id)} className="text-danger hover:brightness-90" title="Remover"><TrashIcon /></button>
+                          <button onClick={() => handleEditProduct(product)} className="text-primary-100 hover:brightness-90" title="Editar">Editar</button>
+                          <button onClick={() => handleDeleteProduct(product.id)} className="bg-red-600 text-primary-100 hover:brightness-90" title="Remover">Apagar</button>
                         </div>
                       </td>
                     </tr>
