@@ -1,7 +1,7 @@
 // frontend/src/pages/ReportsPage.jsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/api';
-import { Card, Input, Spinner, ModalWrapper, Select } from '../components/common';
+import { Card, Input, Spinner, ModalWrapper } from '../components/common';
 import {
   TargetIcon,
   SaveIcon,
@@ -80,11 +80,11 @@ const downloadCSV = (headers, rows, filename) => {
 
 // UI helpers locais
 const Button = ({ children, onClick, type = 'button', variant = 'primary', className = '', ...props }) => {
-  const baseStyle = 'px-4 py-2 rounded text-white flex items-center gap-2';
+  const baseStyle = 'px-4 py-2 rounded text-white flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-2';
   const style =
     variant === 'secondary'
-      ? 'bg-base-400 hover:brightness-110'
-      : 'bg-[rgb(var(--color-primary-600))] hover:brightness-110';
+      ? 'bg-base-400 hover:brightness-110 focus:ring-base-300'
+      : 'bg-[rgb(var(--color-primary-600))] hover:brightness-110 focus:ring-[rgb(var(--color-primary-500))]';
   return (
     <button type={type} onClick={onClick} className={`${baseStyle} ${style} ${className}`} {...props}>
       {children}
@@ -93,8 +93,8 @@ const Button = ({ children, onClick, type = 'button', variant = 'primary', class
 };
 
 const ReportCard = ({ title, right, children }) => (
-  <Card className="mb-6 ">
-    <div className="flex items-center justify-between mb-4 ">
+  <Card className="mb-6">
+    <div className="flex items-center justify-between mb-4">
       <h2 className="text-xl font-bold text-base-400">{title}</h2>
       {/* Oculta ações no modo de impressão */}
       {right ? <div className="print:hidden">{right}</div> : null}
@@ -149,10 +149,6 @@ const ReportsPage = () => {
   // metas
   const [goalsModalOpen, setGoalsModalOpen] = useState(false);
   const [goals, setGoals] = useState({ monthlyRevenue: 0, monthlyProfit: 0 });
-
-  // filtros adicionais (estoque)
-  const [filterBrand, setFilterBrand] = useState('');
-  const [filterType, setFilterType] = useState('');
 
   // init
   useEffect(() => {
@@ -248,24 +244,73 @@ const ReportsPage = () => {
     return Array.from(map.values()).sort((a, b) => b.total - a.total);
   }, [salesInPeriod]);
 
-  // estoque filtrado
-  const uniqueBrands = useMemo(
-    () => [...new Set((products || []).map((p) => p.brand || p.marca).filter(Boolean))],
-    [products]
-  );
-  const uniqueTypes = useMemo(
-    () => [...new Set((products || []).map((p) => p.type || p.tipo || p.category).filter(Boolean))],
-    [products]
-  );
+  /* =================== Estoque: filtros & métricas =================== */
+  // Normalizador: remove acentos, trim e lowercase
+  const normalize = useCallback((v) => {
+    return String(v ?? '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLowerCase();
+  }, []);
+
+  // Listas únicas (preservam rótulo original; deduplicam pelo normalizado)
+  const uniqueBrands = useMemo(() => {
+    const map = new Map();
+    (products || []).forEach((p) => {
+      const label = p.marca ?? p.brand ?? '';
+      const key = normalize(label);
+      if (key && !map.has(key)) map.set(key, label);
+    });
+    return Array.from(map.values()).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [products, normalize]);
+
+  const uniqueTypes = useMemo(() => {
+    const map = new Map();
+    (products || []).forEach((p) => {
+      const label = p.tipo ?? p.type ?? p.category ?? '';
+      const key = normalize(label);
+      if (key && !map.has(key)) map.set(key, label);
+    });
+    return Array.from(map.values()).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [products, normalize]);
+
+  // Estados como arrays (multi-seleção)
+  const [filterBrands, setFilterBrands] = useState([]); // ex: ["BMW","Audi"]
+  const [filterTypes, setFilterTypes] = useState([]);
+  const brandRef = useRef(null);
+  const typeRef = useRef(null);
+
+  // util: ler opções selecionadas do <select multiple>
+  const handleMultiChange = (setter) => (e) => {
+    const values = Array.from(e.target.selectedOptions, (o) => o.value);
+    setter(values);
+  };
+
+  // limpar tudo (sincroniza DOM + plugin)
+  const clearAll = () => {
+    setFilterBrands([]);
+    setFilterTypes([]);
+    [brandRef, typeRef].forEach((ref) => {
+      if (!ref.current) return;
+      Array.from(ref.current.options).forEach((o) => (o.selected = false));
+      ref.current.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  };
+
+  // Filtro efetivo com comparação normalizada (marca e tipo) — agora multi
   const filteredProducts = useMemo(() => {
+    const selectedBrands = (filterBrands || []).map((x) => normalize(x));
+    const selectedTypes = (filterTypes || []).map((x) => normalize(x));
+
     return (products || []).filter((p) => {
-      const b = p.brand || p.marca;
-      const t = p.type || p.tipo || p.category;
-      const byB = filterBrand ? b === filterBrand : true;
-      const byT = filterType ? t === filterType : true;
+      const b = normalize(p.marca ?? p.brand);
+      const t = normalize(p.tipo ?? p.type ?? p.category);
+      const byB = selectedBrands.length ? selectedBrands.includes(b) : true;
+      const byT = selectedTypes.length ? selectedTypes.includes(t) : true;
       return byB && byT;
     });
-  }, [products, filterBrand, filterType]);
+  }, [products, filterBrands, filterTypes, normalize]);
 
   // valor e rupturas
   const inventoryValue = useMemo(() => {
@@ -278,7 +323,9 @@ const ReportsPage = () => {
   }, [filteredProducts]);
 
   const lowStockCount = useMemo(() => {
-    return (filteredProducts || []).filter((p) => Number(p.quantity || 0) <= Number(p.minStock ?? p.min_stock ?? 0)).length;
+    return (filteredProducts || []).filter(
+      (p) => Number(p.quantity || 0) <= Number(p.minStock ?? p.min_stock ?? 0)
+    ).length;
   }, [filteredProducts]);
 
   // metas/forecast simples
@@ -292,7 +339,10 @@ const ReportsPage = () => {
   }, [start, end]);
 
   const revenueSoFar = useMemo(() => sum(salesInPeriod.map((s) => s.total || 0)), [salesInPeriod]);
-  const naiveForecast = useMemo(() => (revenueSoFar / Math.max(elapsedDays, 1)) * periodDays, [revenueSoFar, elapsedDays, periodDays]);
+  const naiveForecast = useMemo(
+    () => (revenueSoFar / Math.max(elapsedDays, 1)) * periodDays,
+    [revenueSoFar, elapsedDays, periodDays]
+  );
 
   // RFM (CRM light)
   const rfm = useMemo(() => {
@@ -337,12 +387,13 @@ const ReportsPage = () => {
 
   /* =================== UI comuns =================== */
   const Header = (
-    <div className="flex justify-between items-center">
+    <div className="flex justify-between items-center ">
       <h1 className="text-3xl font-bold text-base-400">Relatórios</h1>
       {logoBase64 && <img src={logoBase64} alt="Logo da empresa" className="max-h-16" />}
     </div>
   );
 
+  /* ======== Filtro por período (reuso em várias abas) ======== */
   const FiltersBar = (
     <Card>
       <div className="print:grid print:grid-cols-2 print:gap-4  grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -361,6 +412,141 @@ const ReportsPage = () => {
     </Card>
   );
 
+  /* ======== Filtros de Estoque (multiselect com tags) ======== */
+const FiltersBarEstoque = (
+  <Card className='mb-4 print:hidden'>
+    {/* 1ª linha: filtros + ações (ações ocultas na impressão) */}
+    <div className="grid grid-cols-1 m-auto md:grid-cols-3 gap-4 items-center">
+      {/* MARCA (multi) */}
+      <div>
+        <label htmlFor="filterBrands" className="block mb-1 text-sm">Marca</label>
+        <select
+          ref={brandRef}
+          id="filterBrands"
+          multiple
+          multiselect-search="true"
+          multiselect-select-all="true"
+          multiselect-max-items="3"
+          className="w-full"
+          onChange={handleMultiChange(setFilterBrands)}
+        >
+          {uniqueBrands.map((m) => (
+            <option key={m} value={m}>{m}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* TIPO/CATEGORIA (multi) */}
+      <div>
+        <label htmlFor="filterTypes" className="block mb-1 text-sm">Tipo/Categoria</label>
+        <select
+          ref={typeRef}
+          id="filterTypes"
+          multiple
+          multiselect-search="true"
+          multiselect-select-all="true"
+          multiselect-max-items="3"
+          className="w-full "
+          onChange={handleMultiChange(setFilterTypes)}
+        >
+          {uniqueTypes.map((t) => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Ações no topo (direita) */}
+      <div className="flex gap-2 print:hidden">
+        <Button onClick={() => window.print()} variant="secondary" title="Imprimir">
+          <PrintIcon /> Imprimir
+        </Button>
+
+        <Button
+          onClick={() => {
+            const headers = ['Produto', 'SKU', 'Qtd', 'Mínimo', 'Status'];
+            const rows = filteredProducts.map((p) => [
+              p.name,
+              p.sku,
+              p.quantity,
+              p.minStock ?? p.min_stock ?? 0,
+              Number(p.quantity || 0) <= Number(p.minStock ?? p.min_stock ?? 0) ? 'Abaixo do mínimo' : 'OK',
+            ]);
+
+            const csv = [headers.join(';'), ...rows.map((r) => r.join(';'))].join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'posicao_estoque.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+          title="Exportar CSV"
+        >
+          <DownloadIcon /> Exportar CSV
+        </Button>
+      </div>
+    </div>
+
+    {/* 2ª linha: tags (esquerda) + limpar (direita) — oculta na impressão */}
+    <div className=" grid grid-cols-1 md:grid-cols-3 gap-2 items-start print:hidden">
+      {/* Tags selecionadas ocupam 2 colunas */}
+      <div className="md:col-span-2 flex flex-wrap items-center gap-2">
+        {filterBrands.map((b) => (
+          <span key={`b-${b}`} className="inline-flex items-center gap-2 bg-base-100 px-2 py-1 rounded-lg text-sm">
+            {b}
+            <button
+              className="text-danger-600"
+              title="Remover"
+              onClick={() => {
+                const next = filterBrands.filter((x) => x !== b);
+                setFilterBrands(next);
+                if (brandRef.current) {
+                  const opt = Array.from(brandRef.current.options).find((o) => o.value === b);
+                  if (opt) opt.selected = false;
+                  brandRef.current.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+              }}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+
+        {filterTypes.map((t) => (
+          <span key={`t-${t}`} className="inline-flex items-center gap-2 bg-base-100 px-2 py-1 rounded-lg text-sm">
+            {t}
+            <button
+              className="text-danger-600"
+              title="Remover"
+              onClick={() => {
+                const next = filterTypes.filter((x) => x !== t);
+                setFilterTypes(next);
+                if (typeRef.current) {
+                  const opt = Array.from(typeRef.current.options).find((o) => o.value === t);
+                  if (opt) opt.selected = false;
+                  typeRef.current.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+              }}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+      </div>
+
+
+    </div>
+      {/* Botão limpar à direita */}
+      <div className="flex mt-2">
+        <button className="text-sm underline" onClick={clearAll}>
+          Limpar filtros
+        </button>
+      </div>
+  </Card>
+);
+
+
   /* =================== Blocos por aba =================== */
 
   // 1) Desempenho de Vendas
@@ -373,7 +559,9 @@ const ReportsPage = () => {
           <StatBadge label="Receita (R$)" value={formatCurrency(sum(salesInPeriod.map((s) => s.total || 0)))} />
           <StatBadge
             label="Ticket Médio"
-            value={formatCurrency((sum(salesInPeriod.map((s) => s.total || 0)) / Math.max(salesInPeriod.length, 1)))}
+            value={formatCurrency(
+              sum(salesInPeriod.map((s) => s.total || 0)) / Math.max(salesInPeriod.length, 1)
+            )}
           />
           <StatBadge
             label="Itens/Venda"
@@ -441,7 +629,10 @@ const ReportsPage = () => {
           <Button
             onClick={() => {
               const headers = ['Forma', 'Total (R$)'];
-              const rows = Object.entries(receivableByMethod).map(([k, v]) => [METHOD_LABEL[k] || k, String(v.toFixed(2)).replace('.', ',')]);
+              const rows = Object.entries(receivableByMethod).map(([k, v]) => [
+                METHOD_LABEL[k] || k,
+                String(v.toFixed(2)).replace('.', ','),
+              ]);
               downloadCSV(headers, rows, 'a_receber_por_forma.csv');
             }}
           >
@@ -530,7 +721,9 @@ const ReportsPage = () => {
     const qCount = (quotes || []).filter((q) => withinRange(q.createdAt || q.created_at, start, end)).length;
     const sCount = salesInPeriod.length;
     const rate = qCount > 0 ? (sCount / qCount) * 100 : 0;
-    const qVal = sum((quotes || []).filter((q) => withinRange(q.createdAt || q.created_at, start, end)).map((q) => q.total || 0));
+    const qVal = sum(
+      (quotes || []).filter((q) => withinRange(q.createdAt || q.created_at, start, end)).map((q) => q.total || 0)
+    );
     const sVal = sum(salesInPeriod.map((s) => s.total || 0));
     return { qCount, sCount, rate, qVal, sVal };
   }, [quotes, salesInPeriod, start, end]);
@@ -632,47 +825,7 @@ const ReportsPage = () => {
   // 6) Posição de Estoque
   const TabEstoque = (
     <>
-      <Card>
-        <div className="flex flex-wrap gap-4">
-          <Select label="Marca" value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)}>
-            <option value="">Todas</option>
-            {uniqueBrands.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </Select>
-          <Select label="Tipo/Categoria" value={filterType} onChange={(e) => setFilterType(e.target.value)}>
-            <option value="">Todos</option>
-            {uniqueTypes.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </Select>
-          {/* ações não imprimem */}
-          <div className="ml-auto flex gap-2 print:hidden">
-            <Button
-              onClick={() => {
-                const headers = ['Produto', 'SKU', 'Qtd', 'Mínimo', 'Status'];
-                const rows = filteredProducts.map((p) => [
-                  p.name,
-                  p.sku,
-                  p.quantity,
-                  p.minStock ?? p.min_stock ?? 0,
-                  Number(p.quantity || 0) <= Number(p.minStock ?? p.min_stock ?? 0) ? 'Abaixo do mínimo' : 'OK',
-                ]);
-                downloadCSV(headers, rows, 'posicao_estoque.csv');
-              }}
-            >
-              <DownloadIcon /> Exportar CSV
-            </Button>
-            <Button variant="secondary" onClick={() => window.print()}>
-              <PrintIcon /> Imprimir
-            </Button>
-          </div>
-        </div>
-      </Card>
+      {FiltersBarEstoque}
 
       <ReportCard title="Resumo de Estoque">
         <div className="print:grid print:grid-cols-3 print:gap-4 grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -792,16 +945,13 @@ const ReportsPage = () => {
     <>
       {FiltersBar}
       <ReportCard title="Indicadores Operacionais">
-        <div className="print:grid print:grid-cols-3  grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="print:grid print:grid-cols-3 grid grid-cols-1 md:grid-cols-3 gap-4">
           <StatBadge label="Devoluções" value={returnsInPeriod.length} danger={returnsInPeriod.length > 0} />
           <StatBadge
             label="% Devolução vs Vendas"
             value={`${((returnsInPeriod.length / Math.max(salesInPeriod.length, 1)) * 100).toFixed(1)}%`}
           />
-          <StatBadge
-            label="Pedidos sem itens? (placeholder)"
-            value="—"
-          />
+          <StatBadge label="Pedidos sem itens? (placeholder)" value="—" />
         </div>
       </ReportCard>
       <ReportCard title="Devoluções (lista)">
@@ -913,11 +1063,11 @@ const ReportsPage = () => {
   const TabMktAtendimento = (
     <>
       {FiltersBar}
-      <ReportCard title="Marketing & Atendimento">
+    <ReportCard title="Marketing & Atendimento">
         <p className="text-sm text-base-300">
-          Para métricas completas (CAC, ROI por campanha, FRT/CSAT), habilite endpoints de{' '}
-          <code>campaigns</code> e <code>tickets</code> no backend. No momento, os relatórios
-          usam somente dados de vendas (canal/vendedor se presentes).
+          Para métricas completas (CAC, ROI por campanha, FRT/CSAT), habilite endpoints de <code>campaigns</code> e{' '}
+          <code>tickets</code> no backend. No momento, os relatórios usam somente dados de vendas (canal/vendedor se
+          presentes).
         </p>
       </ReportCard>
     </>
@@ -931,7 +1081,15 @@ const ReportsPage = () => {
     { key: 'funil', label: 'Funil de Vendas', node: TabFunil },
     { key: 'clientes-vendas', label: 'Vendas por Cliente', node: TabClientesVendas },
     { key: 'metas', label: 'Metas & Previsões', node: TabMetas },
-    { key: 'estoque', label: 'Posição de Estoque', node: TabEstoque },
+    {
+      key: 'estoque',
+      label: 'Posição de Estoque',
+      node: (
+        <div id="printable-area" className="report-content">
+          {TabEstoque}
+        </div>
+      ),
+    },
     { key: 'analise', label: 'Análise & Desempenho', node: TabAnalise },
     { key: 'operacionais', label: 'Operacionais', node: TabOperacionais },
     { key: 'pipeline', label: 'Vendas & Pipeline', node: TabPipeline },
@@ -941,6 +1099,7 @@ const ReportsPage = () => {
 
   return (
     // <<< IMPORTANTE PARA IMPRESSÃO >>>
+    // Removemos 'report-content' do wrapper raiz para imprimir apenas a aba Estoque
     <div className="report-content space-y-6">
       {Header}
 
@@ -973,20 +1132,24 @@ const ReportsPage = () => {
           <Input
             label="Meta de Receita (R$)"
             type="number"
-            value={goals.monthlyRevenue}
-            onChange={(e) => setGoals((g) => ({ ...g, monthlyRevenue: parseFloat(e.target.value) || 0 }))}
+            value={newGoals.monthlyRevenue}
+            onChange={(e) =>
+              setNewGoals((g) => ({ ...g, monthlyRevenue: Number.parseFloat(e.target.value) || 0 }))
+            }
           />
           <Input
             label="Meta de Lucro (R$)"
             type="number"
-            value={goals.monthlyProfit}
-            onChange={(e) => setGoals((g) => ({ ...g, monthlyProfit: parseFloat(e.target.value) || 0 }))}
+            value={newGoals.monthlyProfit}
+            onChange={(e) =>
+              setNewGoals((g) => ({ ...g, monthlyProfit: Number.parseFloat(e.target.value) || 0 }))
+            }
           />
           <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={() => setGoalsModalOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={() => setGoalsModalOpen(false)}>
+            <Button onClick={saveGoals}>
               <SaveIcon className="mr-1" />
               Salvar
             </Button>

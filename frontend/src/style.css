@@ -220,11 +220,27 @@ tr:nth-child(even) { background-color: #fafafa; }
 /* ============================== */
 @media print {
   /* Base limpa */
-  html, body { background: #fff; color: #000; overflow: visible; }
+   body * {
+          visibility: hidden;
+        }
+   #printable-area, #printable-area * {
+          visibility: visible;
+        }
+  #printable-area {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 100%;
+        }
+  .no-print {
+          display: none !important;
+        }
+
+
 
   /* Utilitários */
   .print\:hidden { display: none; }
-  .print\:show   { display: block; }
+  .print\:show   { display: block  !important;  }
  /* Imprimir do relatório e Grid */
   .print\:grid { display: grid !important; }
   .print\:grid-cols-2  { grid-template-columns: repeat(2, 1fr) !important; }
