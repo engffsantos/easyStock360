@@ -131,6 +131,8 @@ const StatBadge = ({ label, value, danger = false }) => (
 
 /* ======================= Página ======================= */
 const ReportsPage = () => {
+  //Empresa
+  const [companyInfo, setCompanyInfo] = useState(null);
   // período padrão = mês atual
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
@@ -151,38 +153,48 @@ const ReportsPage = () => {
   const [goals, setGoals] = useState({ monthlyRevenue: 0, monthlyProfit: 0 });
 
   // init
-  useEffect(() => {
-    const today = new Date();
-    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
-    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().slice(0, 10);
-    setStart(firstDay);
-    setEnd(lastDay);
+useEffect(() => {
+  let cancelled = false; // evita setState após unmount / StrictMode
 
-    (async () => {
-      try {
-        const [company, s, q, p, f, c, r, g] = await Promise.all([
-          api.getCompanyInfo().catch(() => ({})),
-          api.getSales(),
-          api.getQuotes().catch(() => []),
-          api.getProducts(),
-          api.getFinancialEntries(),
-          api.getCustomers().catch(() => []),
-          api.getReturns().catch(() => []),
-          api.getGoals().catch(() => null),
-        ]);
-        setLogoBase64(company?.logoBase64 || '');
-        setSales(s || []);
-        setQuotes(q || []);
-        setProducts(p || []);
-        setFinancial(f || []);
-        setCustomers(c || []);
-        setReturnsList(r || []);
-        if (g) setGoals({ monthlyRevenue: g.monthlyRevenue || 0, monthlyProfit: g.monthlyProfit || 0 });
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  const today = new Date();
+  const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+  const lastDay  = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().slice(0, 10);
+  setStart(firstDay);
+  setEnd(lastDay);
+
+  (async () => {
+    try {
+      const [company, s, q, p, f, c, r, g] = await Promise.all([
+        api.getCompanyInfo().catch(() => ({})),
+        api.getSales(),
+        api.getQuotes().catch(() => []),
+        api.getProducts(),
+        api.getFinancialEntries(),
+        api.getCustomers().catch(() => []),
+        api.getReturns().catch(() => []),
+        api.getGoals().catch(() => null),
+      ]);
+
+      if (cancelled) return;
+
+      setCompanyInfo(company || null);               // <-- necessário pro Header
+      setLogoBase64(company?.logoBase64 || '');
+
+      setSales(s || []);
+      setQuotes(q || []);
+      setProducts(p || []);
+      setFinancial(f || []);
+      setCustomers(c || []);
+      setReturnsList(r || []);
+
+      if (g) setGoals({ monthlyRevenue: g.monthlyRevenue || 0, monthlyProfit: g.monthlyProfit || 0 });
+    } finally {
+      if (!cancelled) setLoading(false);
+    }
+  })();
+
+  return () => { cancelled = true; };
+}, []);
 
   /* =================== Derivados por período =================== */
   const salesInPeriod = useMemo(
@@ -386,12 +398,41 @@ const ReportsPage = () => {
   }, [sales]);
 
   /* =================== UI comuns =================== */
-  const Header = (
-    <div className="flex justify-between items-center ">
-      <h1 className="text-3xl font-bold text-base-400">Relatórios</h1>
-      {logoBase64 && <img src={logoBase64} alt="Logo da empresa" className="max-h-16" />}
+const Header = (
+  <div className="flex justify-between items-start">
+    <h1 className="text-3xl font-bold text-base-900 print:text-black">Relatórios</h1>
+
+    <div className="flex items-start gap-4">
+      {(companyInfo?.logoBase64 || logoBase64) && (
+        <img
+          src={companyInfo?.logoBase64 || logoBase64}
+          alt="Logo da empresa"
+          className="w-24 h-auto object-contain"
+        />
+      )}
+
+      {(companyInfo &&
+        (companyInfo.name ||
+          companyInfo.address ||
+          companyInfo.phone ||
+          companyInfo.email ||
+          companyInfo.cnpj ||
+          (Array.isArray(companyInfo.companySocials) && companyInfo.companySocials.length > 0))) && (
+        <div className="text-sm leading-tight text-base-700 print:text-black">
+          {companyInfo.name && <p className="font-semibold">{companyInfo.name}</p>}
+          {companyInfo.address && <p>{companyInfo.address}</p>}
+          {companyInfo.phone && <p>{companyInfo.phone}</p>}
+          {companyInfo.email && <p>{companyInfo.email}</p>}
+          {companyInfo.cnpj && <p>CNPJ: {companyInfo.cnpj}</p>}
+          {Array.isArray(companyInfo.companySocials) && companyInfo.companySocials.length > 0 && (
+            <p>Redes: {companyInfo.companySocials.filter(Boolean).join(' • ')}</p>
+          )}
+        </div>
+      )}
     </div>
-  );
+  </div>
+);
+
 
   /* ======== Filtro por período (reuso em várias abas) ======== */
   const FiltersBar = (
@@ -1076,19 +1117,12 @@ const FiltersBarEstoque = (
   /* =================== Render raiz =================== */
 
   const tabs = [
-    { key: 'desempenho', label: 'Desempenho de Vendas', node: TabDesempenho },
-    { key: 'financeiro', label: 'Financeiro & Análises', node: TabFinanceiro },
+    { key: 'desempenho', label: 'Desempenho de Vendas', node: TabDesempenho  },
+    { key: 'financeiro',label: 'Financeiro & Análises', node: TabFinanceiro },
     { key: 'funil', label: 'Funil de Vendas', node: TabFunil },
     { key: 'clientes-vendas', label: 'Vendas por Cliente', node: TabClientesVendas },
     { key: 'metas', label: 'Metas & Previsões', node: TabMetas },
-    {
-      key: 'estoque',
-      label: 'Posição de Estoque',
-      node: (
-        <div id="printable-area" className="report-content">
-          {TabEstoque}
-        </div>
-      ),
+    {key: 'estoque',label: 'Posição de Estoque',node: (TabEstoque),
     },
     { key: 'analise', label: 'Análise & Desempenho', node: TabAnalise },
     { key: 'operacionais', label: 'Operacionais', node: TabOperacionais },
@@ -1100,7 +1134,7 @@ const FiltersBarEstoque = (
   return (
     // <<< IMPORTANTE PARA IMPRESSÃO >>>
     // Removemos 'report-content' do wrapper raiz para imprimir apenas a aba Estoque
-    <div className="report-content space-y-6">
+    <div className="report-content space-y-6" id="printable-area">
       {Header}
 
       {/* Tabs - não imprimir */}

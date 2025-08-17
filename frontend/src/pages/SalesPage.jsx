@@ -377,21 +377,21 @@ const SalesPage = ({ onNavigateToReceipt }) => {
                   <td className="px-6 py-4 text-sm font-bold text-primary-800">{formatCurrency(quote.total)}</td>
                   <td className="px-6 py-4">
                     <div className="flex gap-2 items-center flex-wrap">
-                      <PrimaryButton className="!py-1 !px-2 text-sm" onClick={() => {
+                      <PrimaryButton className="!py-1 !px-2 " onClick={() => {
                         setQuoteToConvert(quote);
                         setPaymentDetails({ paymentMethod: 'PIX', installments: 1 });
                         setBoletoDates(['']);
                       }}>
-                        <CheckCircleIcon className="w-4 h-4" /> Converter
+                         Converter
                       </PrimaryButton>
                       <PrimaryButton className="!py-1 !px-2" onClick={() => onNavigateToReceipt(quote.id)}>
                         Ver Orçamento
                       </PrimaryButton>
                       <button onClick={() => handleEditQuote(quote)} className=" hover:text-primary-800 p-1 rounded" title="Editar Orçamento">
-                        <EditIcon />
+                        Editar
                       </button>
-                      <button onClick={() => handleDeleteQuote(quote.id)} className="text-danger hover:brightness-90 p-1 rounded" title="Excluir Orçamento">
-                        <TrashIcon />
+                      <button onClick={() => handleDeleteQuote(quote.id)} className="bg-red-600 hover:brightness-90 p-1 rounded" title="Excluir Orçamento">
+                        Apagar
                       </button>
                     </div>
                   </td>
