@@ -220,9 +220,9 @@ tr:nth-child(even) { background-color: #fafafa; }
 /* ============================== */
 @media print {
   /* Base limpa */
-   body * {
-          visibility: hidden;
-        }
+  /* body * {*/
+  /*        visibility: hidden;*/
+  /*      }*/
    #printable-area, #printable-area * {
           visibility: visible;
         }
@@ -353,6 +353,7 @@ tr:nth-child(even) { background-color: #fafafa; }
     margin: 0 auto !important;
     background: #fff !important;
     box-shadow: none !important;
+    visibility: visible !important;
   }
   /* Página */
   @page { margin: 1cm; size: auto; }

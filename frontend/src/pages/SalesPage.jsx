@@ -60,6 +60,8 @@ const SalesPage = ({ onNavigateToReceipt }) => {
   // Filtro de VENDAS por data
   const [salesDateFrom, setSalesDateFrom] = useState(''); // yyyy-mm-dd
   const [salesDateTo, setSalesDateTo] = useState('');     // yyyy-mm-dd
+  // NOVO: Filtro de VENDAS por texto (cliente ou nº da venda)
+  const [salesSearch, setSalesSearch] = useState('');
 
   // Filtros de ORÇAMENTOS (texto e período)
   const [quoteSearch, setQuoteSearch] = useState('');
@@ -215,15 +217,20 @@ const SalesPage = ({ onNavigateToReceipt }) => {
     [quotes]
   );
 
-  // --------- filtros de vendas (por período) ----------
+  // --------- filtros de vendas (texto + período) ----------
   const filteredSales = useMemo(() => {
+    const term = salesSearch.trim().toLowerCase();
     return sortedSales.filter((s) => {
       const d = new Date(s.createdAt);
       const okFrom = !salesDateFrom || d >= new Date(`${salesDateFrom}T00:00:00`);
       const okTo = !salesDateTo || d <= new Date(`${salesDateTo}T23:59:59`);
-      return okFrom && okTo;
+      const okText =
+        !term ||
+        (s.customerName || '').toLowerCase().includes(term) ||
+        (s.id || '').toLowerCase().includes(term);
+      return okText && okFrom && okTo;
     });
-  }, [sortedSales, salesDateFrom, salesDateTo]);
+  }, [sortedSales, salesSearch, salesDateFrom, salesDateTo]);
 
   // --------- filtros de orçamentos ----------
   const filteredQuotes = useMemo(() => {
@@ -245,9 +252,22 @@ const SalesPage = ({ onNavigateToReceipt }) => {
   // --------- tabelas ----------
   const renderSalesTable = () => (
     <>
-      {/* Filtro por data - VENDAS */}
+      {/* Filtros rápidos - VENDAS (igual ao de Orçamentos, com busca) */}
       <Card className="!p-4 mb-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+          <div className="relative md:col-span-3">
+            <Input
+              id="ssearch"
+              label="Buscar por Cliente ou Nº da Venda"
+              placeholder="Ex.: Maria Silva ou 7b0c-..."
+              value={salesSearch}
+              onChange={(e) => setSalesSearch(e.target.value)}
+              className="pl-10"
+            />
+            <div className="absolute inset-y-0 left-0 top-6 flex items-center pl-3 pointer-events-none">
+              <SearchIcon className="text-base-200" />
+            </div>
+          </div>
           <div>
             <label className="text-sm block mb-1">Data inicial</label>
             <input
@@ -266,7 +286,9 @@ const SalesPage = ({ onNavigateToReceipt }) => {
               className="px-3 py-2 border border-base-200 rounded-xl text-sm w-full"
             />
           </div>
-          <div className="md:col-span-2 text-sm text-base-400">
+
+          {/* Mantém a dica, agora ocupando a linha inteira no grid */}
+          <div className="md:col-span-5 text-sm text-base-400">
             Dica: deixe em branco para ver todas as vendas. O período afeta apenas a aba “Vendas”.
           </div>
         </div>
@@ -309,7 +331,7 @@ const SalesPage = ({ onNavigateToReceipt }) => {
             ) : (
               <tr>
                 <td colSpan="5" className="text-center py-12">
-                  Nenhuma venda encontrada para o período.
+                  Nenhuma venda encontrada para o filtro aplicado.
                 </td>
               </tr>
             )}

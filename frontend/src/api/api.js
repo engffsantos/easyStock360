@@ -71,6 +71,7 @@ export const api = {
   addProduct: (data) => apiClient.post(`/products/`, data),
   updateProduct: (id, data) => apiClient.put(`/products/${id}/`, data),
   deleteProduct: (id) => apiClient.delete(`/products/${id}/`),
+  getProductHistory: (id) => apiClient.get(`/products/${id}/history`).then(res => res.data),
 
   // -------------------------
   // Sales

@@ -1,5 +1,5 @@
 // frontend/src/pages/InventoryPage.jsx
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { api, importProductsFromCSV } from '../api/api';
 import { Card, Input, ModalWrapper, Spinner } from '../components/common';
 import { PlusIcon, EditIcon, TrashIcon, SearchIcon, AlertTriangleIcon } from '../components/icons';
@@ -29,6 +29,21 @@ const SecondaryButton = ({ children, onClick, type = 'button', className = '', .
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+
+// rótulos legíveis para os campos do histórico
+const FIELD_LABELS = {
+  name: 'Nome',
+  sku: 'SKU',
+  marca: 'Marca',
+  tipo: 'Tipo',
+  price: 'Preço',
+  cost: 'Custo',
+  quantity: 'Quantidade',
+  min_stock: 'Estoque Mínimo',
+  created_at: 'Criação',
+  Criação: 'Criação',
+  Exclusão: 'Exclusão',
+};
 
 const ProductForm = ({ product, onSave, onClose, isSaving }) => {
   const [formData, setFormData] = useState({
@@ -127,6 +142,18 @@ const InventoryPage = () => {
   const [editingProduct, setEditingProduct] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  // modal de histórico
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyItems, setHistoryItems] = useState([]);
+  const [historyProduct, setHistoryProduct] = useState(null);
+
+  // filtros do histórico
+  const [historyField, setHistoryField] = useState('');
+  const [historyStart, setHistoryStart] = useState('');
+  const [historyEnd, setHistoryEnd] = useState('');
+  const printRef = useRef(null);
+
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
@@ -181,6 +208,59 @@ const InventoryPage = () => {
     }
   };
 
+  const handleShowHistory = async (product) => {
+    setHistoryProduct(product);
+    setIsHistoryOpen(true);
+    setHistoryLoading(true);
+    // reset filtros ao abrir
+    setHistoryField('');
+    setHistoryStart('');
+    setHistoryEnd('');
+    try {
+      const items = await api.getProductHistory(product.id);
+      setHistoryItems(items || []);
+    } catch (e) {
+      alert('Falha ao buscar histórico do produto.');
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const historyFieldOptions = useMemo(() => {
+    const set = new Set();
+    historyItems.forEach((h) => {
+      if (h.changedField) set.add(h.changedField);
+    });
+    return Array.from(set).sort((a, b) =>
+      (FIELD_LABELS[a] || a).localeCompare(FIELD_LABELS[b] || b, 'pt-BR')
+    );
+  }, [historyItems]);
+
+  const filteredHistory = useMemo(() => {
+    const startTs = historyStart ? new Date(`${historyStart}T00:00:00`).getTime() : null;
+    const endTs = historyEnd ? new Date(`${historyEnd}T23:59:59.999`).getTime() : null;
+    return (historyItems || []).filter((h) => {
+      if (historyField && h.changedField !== historyField) return false;
+      if (h.changedAt) {
+        const t = new Date(h.changedAt).getTime();
+        if (startTs !== null && t < startTs) return false;
+        if (endTs !== null && t > endTs) return false;
+      }
+      return true;
+    });
+  }, [historyItems, historyField, historyStart, historyEnd]);
+
+  const clearHistoryFilters = () => {
+    setHistoryField('');
+    setHistoryStart('');
+    setHistoryEnd('');
+  };
+
+  const handlePrintHistory = () => {
+    // a área imprimível está marcada com .report-content para usar seu preset @media print
+    window.print();
+  };
+
   const filteredProducts = useMemo(() => {
     return products
       .filter(p => !showLowStockOnly || p.quantity <= p.minStock)
@@ -192,7 +272,7 @@ const InventoryPage = () => {
 
   return (
     <>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-6 no-print">
         <h1 className="text-3xl font-bold text-base-400">Estoque</h1>
         <div className="flex gap-2 items-center">
           <PrimaryButton onClick={handleAddProduct}>
@@ -217,8 +297,6 @@ const InventoryPage = () => {
                   alert(`Erro ao importar CSV:\n${err.message}`);
                 }
 
-
-
                 e.target.value = '';
               }}
             />
@@ -229,7 +307,7 @@ const InventoryPage = () => {
         </div>
       </div>
 
-      <Card className="mb-6">
+      <Card className="mb-6  no-print">
         <div className="flex flex-col md:flex-row gap-4">
           <div className="relative flex-grow">
             <Input id="search" label="Buscar por nome ou SKU" placeholder="Digite para buscar..." value={searchTerm}
@@ -254,10 +332,10 @@ const InventoryPage = () => {
       </Card>
 
       <Card>
-        {loading && <div className="flex justify-center p-12"><Spinner /></div>}
+        {loading && <div className="flex justify-center p-12 no-print"><Spinner /></div>}
         {error && <div className="text-center text-danger p-12">{error}</div>}
         {!loading && !error && (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto no-print">
             <table className="min-w-full divide-y divide-base-200">
               <thead className="bg-white">
                 <tr>
@@ -287,7 +365,8 @@ const InventoryPage = () => {
                       <td className="px-6 py-4 text-sm text-right font-medium">
                         <div className="flex gap-2">
                           <button onClick={() => handleEditProduct(product)} className="text-primary-100 hover:brightness-90" title="Editar">Editar</button>
-                          <button onClick={() => handleDeleteProduct(product.id)} className="bg-red-600 text-primary-100 hover:brightness-90" title="Remover">Apagar</button>
+                          <button onClick={() => handleShowHistory(product)} className="text-primary-100 hover:brightness-90" title="Ver histórico">Histórico</button>
+                          <button onClick={() => handleDeleteProduct(product.id)} className="bg-red-600 text-primary-100 hover:brightness-90 px-2 rounded" title="Remover">Apagar</button>
                         </div>
                       </td>
                     </tr>
@@ -303,6 +382,7 @@ const InventoryPage = () => {
         )}
       </Card>
 
+      {/* Modal de cadastro/edição */}
       <ModalWrapper
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -314,6 +394,101 @@ const InventoryPage = () => {
           onClose={() => setIsModalOpen(false)}
           isSaving={isSaving}
         />
+      </ModalWrapper>
+
+      {/* Modal de Histórico */}
+      <ModalWrapper
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        title={`Histórico — ${historyProduct?.name || ''}`}
+      >
+        {historyLoading ? (
+          <div className="flex justify-center p-8 no-print"><Spinner /></div>
+        ) : (
+          <>
+            {/* Filtros do histórico */}
+            <div className="mb-4 grid grid-cols-1 md:grid-cols-4 gap-3 no-print ">
+              <div>
+                <label className="block text-sm mb-1">Campo</label>
+                <select
+                  value={historyField}
+                  onChange={(e) => setHistoryField(e.target.value)}
+                  className="w-full border rounded px-3 py-2"
+                >
+                  <option value="">Todos</option>
+                  {historyFieldOptions.map((f) => (
+                    <option key={f} value={f}>{FIELD_LABELS[f] || f}</option>
+                  ))}
+                </select>
+              </div>
+
+              <Input
+                id="hist-start"
+                label="Início"
+                type="date"
+                value={historyStart}
+                onChange={(e) => setHistoryStart(e.target.value)}
+              />
+              <Input
+                id="hist-end"
+                label="Fim"
+                type="date"
+                value={historyEnd}
+                onChange={(e) => setHistoryEnd(e.target.value)}
+              />
+
+              <div className="flex items-end gap-2 no-print">
+                <SecondaryButton onClick={clearHistoryFilters}>Limpar filtros</SecondaryButton>
+                <PrimaryButton onClick={handlePrintHistory}>🖨️ Imprimir</PrimaryButton>
+              </div>
+            </div>
+
+            {/* Área imprimível */}
+            <div className="report-content">
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold">
+                  Histórico de alterações — {historyProduct?.name}
+                </h3>
+                {(historyField || historyStart || historyEnd) && (
+                    <p className="text-sm text-base-300">
+                      Filtros: {historyField ? `Campo = ${FIELD_LABELS[historyField] || historyField}` : 'Campo = Todos'}
+                      {historyStart ? ` · Início = ${new Date(historyStart + 'T00:00:00').toLocaleDateString('pt-BR')}` : ''}
+                      {historyEnd ? ` · Fim = ${new Date(historyEnd + 'T00:00:00').toLocaleDateString('pt-BR')}` : ''}
+                    </p>
+                )}
+              </div>
+
+              <div className="overflow-x-auto">
+                {filteredHistory.length === 0 ? (
+                    <p className="text-sm text-base-300">Nenhum registro encontrado com os filtros aplicados.</p>
+                ) : (
+                    <table className="min-w-full divide-y divide-base-200">
+                      <thead>
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider">Data</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider">Campo</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider">De</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider">Para</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-base-200">
+                      {filteredHistory.map((h) => (
+                        <tr key={h.id}>
+                          <td className="px-4 py-2 text-sm">
+                            {h.changedAt ? new Date(h.changedAt).toLocaleString('pt-BR') : '-'}
+                          </td>
+                          <td className="px-4 py-2 text-sm">{FIELD_LABELS[h.changedField] || h.changedField}</td>
+                          <td className="px-4 py-2 text-sm">{h.oldValue ?? '-'}</td>
+                          <td className="px-4 py-2 text-sm">{h.newValue ?? '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </ModalWrapper>
     </>
   );
