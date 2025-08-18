@@ -126,6 +126,15 @@ export const api = {
   updateReturnStatus: (id, status) =>
     apiClient.patch(`/returns/${id}/status`, { status }).then(res => res.data),
 
+  // NOVA: finalizar devolução com reembolso e processar DESPESA no financeiro
+  completeReturnWithRefund: async (id) => {
+    // 1) Concluir a devolução
+    await apiClient.patch(`/returns/${id}/status`, { status: 'CONCLUIDA' });
+    // 2) Processar o reembolso (gera DESPESA)
+    const res = await apiClient.post(`/returns/${id}/process_refund`);
+    return res.data; // retorna dados da despesa criada (se o backend devolver)
+  },
+
   // -------------------------
   // Financial
   // -------------------------

@@ -33,6 +33,7 @@ const StatusBadge = ({ status }) => {
   );
 };
 
+/** ---------- ReturnForm (mantido dentro da página) ---------- */
 const ReturnForm = ({ onSave, onClose }) => {
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -135,9 +136,7 @@ const ReturnForm = ({ onSave, onClose }) => {
 
   if (loading) {
     return (
-      <div className="flex justify-center p-8">
-        <Spinner />
-      </div>
+      <div className="flex justify-center p-8"><Spinner /></div>
     );
   }
 
@@ -265,11 +264,15 @@ const ReturnForm = ({ onSave, onClose }) => {
   );
 };
 
+/** ---------- Página de Devoluções ---------- */
 const ReturnsPage = () => {
   const [returns, setReturns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // loading por linha de ação (concluir / cancelar)
+  const [actionLoadingId, setActionLoadingId] = useState(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -293,6 +296,50 @@ const ReturnsPage = () => {
     setIsModalOpen(false);
     fetchData();
     alert('Devolução registrada com sucesso!');
+  };
+
+  // NOVO: concluir devolução considerando a resolução (REEMBOLSO/CREDITO)
+  const handleCompleteReturn = async (returnId, resolution) => {
+    const ok = window.confirm(
+      resolution === 'REEMBOLSO'
+        ? 'Confirmar conclusão com REEMBOLSO? Uma DESPESA será gerada no financeiro.'
+        : 'Confirmar conclusão desta devolução?'
+    );
+    if (!ok) return;
+
+    try {
+      setActionLoadingId(returnId);
+      if (resolution === 'REEMBOLSO') {
+        await api.completeReturnWithRefund(returnId);
+      } else {
+        await api.updateReturnStatus(returnId, 'CONCLUIDA');
+      }
+      await fetchData();
+      alert('Devolução concluída com sucesso!');
+    } catch (err) {
+      console.error(err);
+      alert(`Falha ao concluir devolução: ${err?.response?.data?.error || err.message || 'Erro desconhecido'}`);
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  // Opcional: cancelar devolução em ABERTA
+  const handleCancelReturn = async (returnId) => {
+    const ok = window.confirm('Tem certeza que deseja cancelar esta devolução?');
+    if (!ok) return;
+
+    try {
+      setActionLoadingId(returnId);
+      await api.updateReturnStatus(returnId, 'CANCELADA');
+      await fetchData();
+      alert('Devolução cancelada.');
+    } catch (err) {
+      console.error(err);
+      alert(`Falha ao cancelar devolução: ${err?.response?.data?.error || err.message || 'Erro desconhecido'}`);
+    } finally {
+      setActionLoadingId(null);
+    }
   };
 
   const renderContent = () => {
@@ -330,6 +377,10 @@ const ReturnsPage = () => {
               <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">
                 Status
               </th>
+              {/* NOVA coluna Ações */}
+              <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">
+                Ações
+              </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-base-200">
@@ -361,11 +412,37 @@ const ReturnsPage = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <StatusBadge status={ret.status} />
                   </td>
+
+                  {/* AÇÕES */}
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    {ret.status === 'ABERTA' ? (
+                      <div className="flex gap-2">
+                        <Button
+                          variant="primary"
+                          disabled={actionLoadingId === ret.id}
+                          onClick={() => handleCompleteReturn(ret.id, ret.resolution)}
+                        >
+                          {actionLoadingId === ret.id ? 'Processando...' : 'Concluir'}
+                        </Button>
+
+                        {/* Opcional: Cancelar */}
+                        <Button
+                          variant="secondary"
+                          disabled={actionLoadingId === ret.id}
+                          onClick={() => handleCancelReturn(ret.id)}
+                        >
+                          Cancelar
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="text-base-200">—</span>
+                    )}
+                  </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={6} className="text-center py-12 text-base-300">
+                <td colSpan={7} className="text-center py-12 text-base-300">
                   Nenhuma devolução registrada.
                 </td>
               </tr>
