@@ -2,7 +2,7 @@
 from flask import Blueprint, request, jsonify, Response
 from app.models import db, Product, ProductHistory
 from datetime import datetime, timezone
-from sqlalchemy import inspect
+from sqlalchemy import inspect as sa_inspect
 import csv
 import io
 
@@ -35,17 +35,16 @@ def generate_sku():
     return f"SKU-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
 
 # --------------------------------------
-# Função auxiliar para gravar histórico
+# Funções auxiliares
 # --------------------------------------
 def save_product_history(product: Product, original_data: dict):
     """
     Compara os campos do produto com o snapshot original e grava entradas no histórico
     apenas para o que mudou. O timestamp é sempre UTC-aware.
     """
-    mapper = inspect(Product)
+    mapper = sa_inspect(Product)
     for attr in mapper.attrs:
         field = attr.key
-        # ignore campos não expostos
         if field not in original_data:
             continue
         old_value = original_data[field]
@@ -60,12 +59,30 @@ def save_product_history(product: Product, original_data: dict):
             )
             db.session.add(history_entry)
 
+def table_has_column(table: str, column: str) -> bool:
+    insp = sa_inspect(db.engine)
+    cols = [c["name"] for c in insp.get_columns(table)]
+    return column in cols
+
 # ======================================
 # GET /api/products/  (lista de produtos)
+#   Padrão: apenas ativos
+#   ?include_inactive=1  -> inclui inativos também
+#   ?is_active=0         -> somente inativos
 # ======================================
 @products_bp.route('/', methods=['GET'])
 def list_products():
-    products = Product.query.order_by(Product.created_at.desc()).all()
+    include_inactive = str(request.args.get('include_inactive', '')).lower() in ('1', 'true', 'yes')
+    only_inactive = str(request.args.get('is_active', '')).lower() in ('0', 'false')
+
+    query = Product.query
+    if table_has_column('products', 'is_active'):
+        if only_inactive:
+            query = query.filter(Product.is_active.is_(False))
+        elif not include_inactive:
+            query = query.filter(Product.is_active.is_(True))
+
+    products = query.order_by(Product.created_at.desc()).all()
     result = [
         {
             'id': p.id,
@@ -77,6 +94,7 @@ def list_products():
             'cost': p.cost,
             'quantity': p.quantity,
             'minStock': p.min_stock,
+            'isActive': bool(getattr(p, 'is_active', True)),
             # Datas sempre em ISO 8601 com offset (+00:00)
             'createdAt': to_iso_utc(p.created_at),
         } for p in products
@@ -145,6 +163,8 @@ def update_product(product_id):
         'cost': product.cost,
         'quantity': product.quantity,
         'min_stock': product.min_stock,
+        # se existir, também comparar is_active
+        **({'is_active': product.is_active} if hasattr(product, 'is_active') else {}),
     }
 
     data = request.get_json(silent=True) or {}
@@ -159,6 +179,7 @@ def update_product(product_id):
         'cost': 'cost',
         'quantity': 'quantity',
         'minStock': 'min_stock',
+        # isActive não deve ser alterado por PUT comum
     }
     for k_json, k_model in mapping.items():
         if k_json in data:
@@ -171,26 +192,57 @@ def update_product(product_id):
     return jsonify({'message': 'Produto atualizado com sucesso'}), 200
 
 # =======================================
-# DELETE /api/products/<id>/  (remoção)
+# DELETE /api/products/<id>/  (descontinuado)
 # =======================================
 @products_bp.route('/<string:product_id>/', methods=['DELETE'])
 def delete_product(product_id):
+    return jsonify({'error': 'DELETE descontinuado. Use PATCH /api/products/<id>/deactivate.'}), 405
+
+# =======================================
+# PATCH /api/products/<id>/deactivate
+# =======================================
+@products_bp.route('/<string:product_id>/deactivate', methods=['PATCH'])
+def deactivate_product(product_id):
     product = Product.query.get_or_404(product_id)
-    db.session.delete(product)
-    db.session.commit()
+    if not table_has_column('products', 'is_active'):
+        return jsonify({'error': 'Coluna is_active ausente no banco. Atualize o schema.'}), 500
 
-    # Histórico da exclusão
-    history_entry = ProductHistory(
+    if product.is_active is False:
+        return jsonify({'message': 'Produto já está inativo.'}), 200
+
+    old_val = str(product.is_active)
+    product.is_active = False
+    db.session.add(ProductHistory(
         product_id=product.id,
-        changed_field='Exclusão',
-        old_value='Produto excluído',
-        new_value=None,
-        changed_at=datetime.now(timezone.utc)  # ✅ salva UTC-aware
-    )
-    db.session.add(history_entry)
+        changed_field='is_active',
+        old_value=old_val,
+        new_value=str(product.is_active),
+        changed_at=datetime.now(timezone.utc)
+    ))
     db.session.commit()
+    return jsonify({'message': 'Produto desativado com sucesso'}), 200
 
-    return jsonify({'message': 'Produto removido com sucesso'}), 200
+# (Opcional) reativar para gestão do estoque
+@products_bp.route('/<string:product_id>/activate', methods=['PATCH'])
+def activate_product(product_id):
+    product = Product.query.get_or_404(product_id)
+    if not table_has_column('products', 'is_active'):
+        return jsonify({'error': 'Coluna is_active ausente no banco. Atualize o schema.'}), 500
+
+    if product.is_active is True:
+        return jsonify({'message': 'Produto já está ativo.'}), 200
+
+    old_val = str(product.is_active)
+    product.is_active = True
+    db.session.add(ProductHistory(
+        product_id=product.id,
+        changed_field='is_active',
+        old_value=old_val,
+        new_value=str(product.is_active),
+        changed_at=datetime.now(timezone.utc)
+    ))
+    db.session.commit()
+    return jsonify({'message': 'Produto reativado com sucesso'}), 200
 
 # ====================================================
 # POST /api/products/import_csv  (importação via CSV)

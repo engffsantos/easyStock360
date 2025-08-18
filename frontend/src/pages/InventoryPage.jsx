@@ -43,6 +43,7 @@ const FIELD_LABELS = {
   created_at: 'Criação',
   Criação: 'Criação',
   Exclusão: 'Exclusão',
+  is_active: 'Ativo?',
 };
 
 const ProductForm = ({ product, onSave, onClose, isSaving }) => {
@@ -142,6 +143,10 @@ const InventoryPage = () => {
   const [editingProduct, setEditingProduct] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  // NOVO: filtros de ativos/inativos
+  // mode: 'active' | 'include' | 'only_inactive'
+  const [statusMode, setStatusMode] = useState('active');
+
   // modal de histórico
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -157,14 +162,22 @@ const InventoryPage = () => {
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await api.getProducts();
+
+      const opts =
+        statusMode === 'only_inactive'
+          ? { onlyInactive: true }
+          : statusMode === 'include'
+          ? { includeInactive: true }
+          : {};
+
+      const data = await api.getProducts(opts);
       setProducts(data);
     } catch (e) {
       setError('Falha ao carregar os produtos.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [statusMode]);
 
   useEffect(() => {
     fetchProducts();
@@ -180,14 +193,23 @@ const InventoryPage = () => {
     setIsModalOpen(true);
   };
 
-  const handleDeleteProduct = async (id) => {
-    if (window.confirm('Tem certeza que deseja remover este produto?')) {
+  const handleDeactivateProduct = async (id) => {
+    if (window.confirm('Tem certeza que deseja desativar este produto?')) {
       try {
-        await api.deleteProduct(id);
+        await api.deactivateProduct(id);
         await fetchProducts();
       } catch (e) {
-        alert('Falha ao remover o produto.');
+        alert('Falha ao desativar o produto.');
       }
+    }
+  };
+
+  const handleActivateProduct = async (id) => {
+    try {
+      await api.activateProduct(id);
+      await fetchProducts();
+    } catch (e) {
+      alert('Falha ao reativar o produto.');
     }
   };
 
@@ -257,7 +279,6 @@ const InventoryPage = () => {
   };
 
   const handlePrintHistory = () => {
-    // a área imprimível está marcada com .report-content para usar seu preset @media print
     window.print();
   };
 
@@ -308,26 +329,41 @@ const InventoryPage = () => {
       </div>
 
       <Card className="mb-6  no-print">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="relative flex-grow">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="relative flex-grow md:col-span-2">
             <Input id="search" label="Buscar por nome ou SKU" placeholder="Digite para buscar..." value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
             <div className="absolute inset-y-0 left-0 top-6 flex items-center pl-3 pointer-events-none">
               <SearchIcon className="text-base-200" />
             </div>
           </div>
-          <div className="flex items-center pt-6">
-            <input
-              type="checkbox"
-              id="low-stock-filter"
-              checked={showLowStockOnly}
-              onChange={(e) => setShowLowStockOnly(e.target.checked)}
-              className="h-4 w-4 rounded border-base-200 text-primary-600 focus:ring-primary-500"
-            />
-            <label htmlFor="low-stock-filter" className="ml-2 block text-sm text-base-400">
-              Mostrar apenas estoque baixo
-            </label>
+
+          {/* Filtro de status (ATIVO/INATIVO) */}
+          <div>
+            <label className="text-sm block mb-1">Status do produto</label>
+            <select
+              value={statusMode}
+              onChange={(e) => setStatusMode(e.target.value)}
+              className="w-full border rounded px-3 py-2"
+            >
+              <option value="active">Apenas ativos</option>
+              <option value="include">Incluir inativos</option>
+              <option value="only_inactive">Somente inativos</option>
+            </select>
           </div>
+        </div>
+
+        <div className="flex items-center pt-2">
+          <input
+            type="checkbox"
+            id="low-stock-filter"
+            checked={showLowStockOnly}
+            onChange={(e) => setShowLowStockOnly(e.target.checked)}
+            className="h-4 w-4 rounded border-base-200 text-primary-600 focus:ring-primary-500"
+          />
+          <label htmlFor="low-stock-filter" className="ml-2 block text-sm text-base-400">
+            Mostrar apenas estoque baixo
+          </label>
         </div>
       </Card>
 
@@ -343,17 +379,25 @@ const InventoryPage = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Nome</th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Custo</th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Preço</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Quantidade</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Qtd</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Status</th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Ações</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-base-200">
                 {filteredProducts.length > 0 ? filteredProducts.map(product => {
                   const isLowStock = product.quantity <= product.minStock;
+                  const inactive = product.isActive === false;
+
                   return (
-                    <tr key={product.id} className={isLowStock ? 'bg-warning/10' : ''}>
+                    <tr
+                      key={product.id}
+                      className={`${isLowStock ? 'bg-warning/10' : ''} ${inactive ? 'opacity-60' : ''}`}
+                    >
                       <td className="px-6 py-4 text-sm font-mono">{product.sku}</td>
-                      <td className="px-6 py-4 text-sm font-medium text-base-400">{product.name}</td>
+                      <td className="px-6 py-4 text-sm font-medium text-base-400">
+                        {product.name}
+                      </td>
                       <td className="px-6 py-4 text-sm">{formatCurrency(product.cost)}</td>
                       <td className="px-6 py-4 text-sm">{formatCurrency(product.price)}</td>
                       <td className="px-6 py-4 text-sm">
@@ -362,18 +406,30 @@ const InventoryPage = () => {
                           <span className={isLowStock ? 'text-danger font-bold' : ''}>{product.quantity}</span>
                         </div>
                       </td>
+                      <td className="px-6 py-4 text-sm">
+                        {inactive ? (
+                          <span className="inline-block px-2 py-0.5 rounded bg-base-200 text-base-400">Inativo</span>
+                        ) : (
+                          <span className="inline-block px-2 py-0.5 rounded bg-primary-50 text-primary-600">Ativo</span>
+                        )}
+                      </td>
                       <td className="px-6 py-4 text-sm text-right font-medium">
                         <div className="flex gap-2">
                           <button onClick={() => handleEditProduct(product)} className="text-primary-100 hover:brightness-90" title="Editar">Editar</button>
                           <button onClick={() => handleShowHistory(product)} className="text-primary-100 hover:brightness-90" title="Ver histórico">Histórico</button>
-                          <button onClick={() => handleDeleteProduct(product.id)} className="bg-red-600 text-primary-100 hover:brightness-90 px-2 rounded" title="Remover">Apagar</button>
+
+                          {!inactive ? (
+                            <button onClick={() => handleDeactivateProduct(product.id)} className="bg-red-600 text-primary-100 hover:brightness-90 px-2 rounded" title="Desativar">Desativar</button>
+                          ) : (
+                            <button onClick={() => handleActivateProduct(product.id)} className="bg-base-400 text-white hover:brightness-110 px-2 rounded" title="Reativar">Reativar</button>
+                          )}
                         </div>
                       </td>
                     </tr>
                   );
                 }) : (
                   <tr>
-                    <td colSpan={6} className="text-center py-12">Nenhum produto encontrado.</td>
+                    <td colSpan={7} className="text-center py-12">Nenhum produto encontrado.</td>
                   </tr>
                 )}
               </tbody>

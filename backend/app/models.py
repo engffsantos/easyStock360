@@ -1,8 +1,7 @@
-# backend/app/models.py
-
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import uuid
+from sqlalchemy import text  # para server_default
 
 db = SQLAlchemy()
 
@@ -49,7 +48,7 @@ class CustomerInteraction(db.Model):
     date = db.Column(db.DateTime, default=datetime.utcnow)
 
 # -----------------------------
-# Product (mantido)
+# Product (ATUALIZADO)
 # -----------------------------
 class Product(db.Model):
     __tablename__ = 'products'
@@ -64,6 +63,9 @@ class Product(db.Model):
     quantity = db.Column(db.Integer, nullable=False)
     min_stock = db.Column(db.Integer, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # NOVO: status lógico (ativo/inativo)
+    is_active = db.Column(db.Boolean, nullable=False, default=True, server_default=text('1'))
 
     history = db.relationship('ProductHistory', backref='product', lazy=True)
 
@@ -197,14 +199,8 @@ class CompanySettings(db.Model):
         }
 
 # =====================================================================
-# NOVO: Devoluções (Return / ReturnItem) e (Opcional) CustomerCredit
+# Devoluções (Return / ReturnItem) e (Opcional) CustomerCredit
 # =====================================================================
-
-# Observação: usamos campos textuais (db.String) para "resolution" e "status"
-# para manter compatibilidade ampla com bancos simples (sem Enum nativo).
-# Valores esperados:
-#   resolution: 'REEMBOLSO' | 'CREDITO'
-#   status:     'ABERTA' | 'CONCLUIDA' | 'CANCELADA'
 
 class Return(db.Model):
     __tablename__ = 'returns'
@@ -238,7 +234,6 @@ class ReturnItem(db.Model):
 
     product = db.relationship('Product')
 
-# Opcional: controle de crédito de cliente para resolução 'CREDITO'
 class CustomerCredit(db.Model):
     __tablename__ = 'customer_credits'
 

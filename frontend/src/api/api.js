@@ -62,15 +62,29 @@ export const api = {
   addInteraction: (data) => apiClient.post(`/customers/${data.customerId}/interactions/`, data),
   getInteractionsByCustomerId: (id) => apiClient.get(`/customers/${id}/interactions/`).then(res => res.data),
   getCustomerPurchases: (id) => apiClient.get(`/customers/${id}/purchases/`).then(res => res.data),
-// Créditos do cliente
+  // Créditos do cliente
   getCustomerCredits: (id) =>  apiClient.get(`/customers/${id}/credits/`).then(res => res.data),
+
   // -------------------------
-  // Products
+  // Products (ATUALIZADO)
   // -------------------------
-  getProducts: () => apiClient.get(`/products/`).then(res => res.data),
+  // opts: { includeInactive?: boolean, onlyInactive?: boolean }
+  getProducts: (opts = {}) => {
+    const params = {};
+    if (opts.onlyInactive) params.is_active = 0;
+    else if (opts.includeInactive) params.include_inactive = 1;
+    return apiClient.get(`/products/`, { params }).then(res => res.data);
+  },
   addProduct: (data) => apiClient.post(`/products/`, data),
   updateProduct: (id, data) => apiClient.put(`/products/${id}/`, data),
-  deleteProduct: (id) => apiClient.delete(`/products/${id}/`),
+
+  // Novo fluxo: desativar/reativar (mantém histórico)
+  deactivateProduct: (id) => apiClient.patch(`/products/${id}/deactivate`).then(res => res.data),
+  activateProduct: (id) => apiClient.patch(`/products/${id}/activate`).then(res => res.data),
+
+  // Alias para compat (antigo delete -> agora desativar)
+  deleteProduct: (id) => apiClient.patch(`/products/${id}/deactivate`).then(res => res.data),
+
   getProductHistory: (id) => apiClient.get(`/products/${id}/history`).then(res => res.data),
 
   // -------------------------
@@ -105,15 +119,10 @@ export const api = {
     apiClient.put(`/sales/payments/${paymentId}`, data).then(res => res.data),
 
   // -------------------------
-  // Returns (Devoluções) — NOVO
+  // Returns (Devoluções)
   // -------------------------
-  // Lista devoluções
   getReturns: () => apiClient.get(`/returns`).then(res => res.data),
-
-  // Cria devolução
   addReturn: (payload) => apiClient.post(`/returns`, payload).then(res => res.data),
-
-  // Atualiza status da devolução
   updateReturnStatus: (id, status) =>
     apiClient.patch(`/returns/${id}/status`, { status }).then(res => res.data),
 
