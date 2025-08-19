@@ -1,29 +1,27 @@
-#backend/app/routes/returns.py
+# backend/app/routes/returns.py
 from flask import Blueprint, request, jsonify
 from datetime import date
 from uuid import uuid4
 
 from app.models import (
-    db, Sale, SaleItem, Product, FinancialEntry,
-    # Os três abaixo precisam existir no models.py conforme o passo #1
-    Return, ReturnItem
+    db,
+    Sale,
+    SaleItem,
+    Product,
+    FinancialEntry,
+    Return,
+    ReturnItem,
+    CustomerCredit,   # novo: usamos para gerar créditos quando resolution = CREDITO
 )
 
-# Opcional: CustomerCredit pode não existir se você não habilitar crédito
-try:
-    from app.models import CustomerCredit  # opcional
-    HAS_CREDIT = True
-except Exception:
-    HAS_CREDIT = False
-
-bp = Blueprint("returns", __name__, url_prefix="/api/returns")
+returns_bp = Blueprint("returns", __name__, url_prefix="/api/returns")
 
 
 # -----------------------------
 # Helpers
 # -----------------------------
 def _calc_total(items):
-    """items: [{price, quantity}]"""
+    """items: [{price, quantity}] -> soma total"""
     return float(sum((float(i["price"]) * int(i["quantity"])) for i in items))
 
 
@@ -78,7 +76,7 @@ def _create_financial_expense_for_return(ret_obj):
     """
     Cria uma DESPESA no financeiro para resolução REEMBOLSO.
     """
-    desc = f"Devolução da venda #{str(ret_obj.sale_id)[:5]}"
+    desc = f"Devolução da venda #{str(ret_obj.sale_id)[:8]}"
     entry = FinancialEntry(
         id=str(uuid4()),
         type="DESPESA",
@@ -94,12 +92,12 @@ def _create_financial_expense_for_return(ret_obj):
 # -----------------------------
 # Endpoints
 # -----------------------------
-@bp.get("")
+@returns_bp.get("")
 def list_returns():
     rs = Return.query.order_by(Return.created_at.desc()).all()
     data = []
     for r in rs:
-        # customerName: tenta via relação com Customer; se não existir, usa sale.customer_name
+        # nome do cliente via relação, ou fallback via venda
         customer_name = None
         try:
             customer_name = r.customer.name if r.customer else None
@@ -114,17 +112,17 @@ def list_returns():
             "customerId": r.customer_id,
             "customerName": customer_name,
             "createdAt": r.created_at.isoformat() if r.created_at else None,
-            "resolution": r.resolution,
-            "status": r.status,
-            "total": float(r.total or 0),
+            "resolution": r.resolution,   # "REEMBOLSO" | "CREDITO"
+            "status": r.status,           # "ABERTA" | "CONCLUIDA" | "CANCELADA"
+            "total": float(r.total or 0.0),
         })
     return jsonify(data), 200
 
 
-@bp.get("/<rid>")
+@returns_bp.get("/<rid>")
 def get_return(rid):
     r = Return.query.get_or_404(rid)
-    # customerName (mesma lógica do list)
+
     customer_name = None
     try:
         customer_name = r.customer.name if r.customer else None
@@ -149,17 +147,23 @@ def get_return(rid):
             "productName": it.product_name,
             "quantity": int(it.quantity),
             "price": float(it.price),
+            "subtotal": float(it.price) * int(it.quantity),
         } for it in r.items]
     }), 200
 
 
-@bp.post("")
+@returns_bp.post("")
 def create_return():
+    """
+    Cria uma devolução. Se resolution == "CREDITO", gera CustomerCredit com amount=balance=total
+    e marca a devolução como CONCLUIDA (sem criar despesa financeira).
+    Se resolution == "REEMBOLSO", cria uma DESPESA no financeiro e deixa status "ABERTA" (ou conforme seu fluxo).
+    """
     payload = request.get_json(silent=True) or {}
     sale_id = payload.get("saleId")
     items = payload.get("items") or []
     reason = (payload.get("reason") or "").strip()
-    resolution = payload.get("resolution") or "REEMBOLSO"  # REEMBOLSO|CREDITO
+    resolution = (payload.get("resolution") or "REEMBOLSO").upper().strip()  # REEMBOLSO|CREDITO
 
     if not sale_id:
         return jsonify({"error": "saleId é obrigatório."}), 400
@@ -183,10 +187,10 @@ def create_return():
     ret = Return(
         id=rid,
         sale_id=sale.id,
-        customer_id=sale.customer_id or "",  # pode ser None no seu modelo
+        customer_id=sale.customer_id or None,
         reason=reason,
         resolution=resolution,
-        status="ABERTA",
+        status="ABERTA",  # pode mudar abaixo
         total=total,
     )
     db.session.add(ret)
@@ -208,29 +212,36 @@ def create_return():
         if product:
             product.quantity = int(product.quantity or 0) + int(it["quantity"])
 
-    # financeiro
+    # financeiro / crédito
     if resolution == "REEMBOLSO":
         _create_financial_expense_for_return(ret)
-    elif resolution == "CREDITO" and HAS_CREDIT:
+        # mantém "ABERTA"; o fluxo pode concluir via PATCH /status
+    elif resolution == "CREDITO":
+        if not sale.customer_id:
+            db.session.rollback()
+            return jsonify({"error": "Não é possível gerar crédito: venda sem cliente vinculado."}), 400
+
         db.session.add(
             CustomerCredit(
                 id=str(uuid4()),
-                customer_id=sale.customer_id or "",
+                customer_id=sale.customer_id,
                 return_id=rid,
                 amount=float(total),
                 balance=float(total),
             )
         )
+        # devoluções em CRÉDITO são concluídas imediatamente
+        ret.status = "CONCLUIDA"
 
     db.session.commit()
     return jsonify({"id": rid}), 201
 
 
-@bp.patch("/<rid>/status")
+@returns_bp.patch("/<rid>/status")
 def update_status(rid):
     r = Return.query.get_or_404(rid)
     body = request.get_json(silent=True) or {}
-    new_status = body.get("status")
+    new_status = (body.get("status") or "").upper().strip()
     if new_status not in ("ABERTA", "CONCLUIDA", "CANCELADA"):
         return jsonify({"error": "Status inválido."}), 400
 

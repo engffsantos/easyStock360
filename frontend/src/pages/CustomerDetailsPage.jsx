@@ -428,7 +428,7 @@ const CustomerDetailsPage = ({ customer: initialCustomer, customerId, onBack }) 
                         <th className="px-4 py-2 text-left text-xs font-medium uppercase">Título</th>
                         <th className="px-4 py-2 text-left text-xs font-medium uppercase">Descrição</th>
                         <th className="px-4 py-2 text-left text-xs font-medium uppercase">Valor</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium uppercase">Ação</th>
+                        {/*<th className="px-4 py-2 text-left text-xs font-medium uppercase">Ação</th>*/}
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-base-200">
@@ -439,7 +439,7 @@ const CustomerDetailsPage = ({ customer: initialCustomer, customerId, onBack }) 
                           <td className="px-4 py-2 text-sm">{h.title}</td>
                           <td className="px-4 py-2 text-sm">{h.description}</td>
                           <td className="px-4 py-2 text-sm font-medium">{h.amount == null ? '-' : formatCurrency(h.amount)}</td>
-                          <td className="px-4 py-2 text-sm">{h.link ? 'Abrir' : '-'}</td>
+                          {/*<td className="px-4 py-2 text-sm">{h.link ? 'Abrir' : '-'}</td>*/}
                         </tr>
                       ))}
                     </tbody>

@@ -62,8 +62,14 @@ export const api = {
   addInteraction: (data) => apiClient.post(`/customers/${data.customerId}/interactions/`, data),
   getInteractionsByCustomerId: (id) => apiClient.get(`/customers/${id}/interactions/`).then(res => res.data),
   getCustomerPurchases: (id) => apiClient.get(`/customers/${id}/purchases/`).then(res => res.data),
+
   // Créditos do cliente
-  getCustomerCredits: (id) =>  apiClient.get(`/customers/${id}/credits/`).then(res => res.data),
+  // Saldo e histórico
+  getCustomerCredits: (id) =>
+    apiClient.get(`/customers/${id}/credits/`).then(res => res.data),
+  // Liquidação de créditos (consumo em venda)
+  liquidateCustomerCredit: (id, amount) =>
+    apiClient.post(`/customers/${id}/credits/liquidate`, { amount }).then(res => res.data),
 
   // -------------------------
   // Products (ATUALIZADO)

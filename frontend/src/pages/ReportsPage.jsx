@@ -26,23 +26,33 @@ const formatDate = (date) =>
   date ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(parseISOWithTZ(date)) : '-';
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
+/* === Formas de pagamento (inclui CREDITO - crédito do cliente, e TRANSFERENCIA) === */
 const METHOD_LABEL = {
   PIX: 'PIX',
   DINHEIRO: 'Dinheiro',
   CARTAO_CREDITO: 'Crédito',
   CARTAO_DEBITO: 'Débito',
   BOLETO: 'Boleto',
+  TRANSFERENCIA: 'Transferência',
+  CREDITO: 'Crédito do Cliente', // <<< linha virtual que vem do backend para indicar uso de crédito
   OUTRO: 'Outro',
 };
+
+/* Normaliza rótulos diversos do backend para os códigos acima */
 const normalizeMethod = (m = '') => {
   const strip = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const t = strip(String(m || '').toUpperCase()).replace(/\s+/g, '_');
+
+  // distingue o "Crédito do Cliente" (CREDITO) do Cartão de Crédito (CARTAO_CREDITO)
+  if (t === 'CREDITO' || t === 'CREDITO_DO_CLIENTE') return 'CREDITO';
+  if (t.includes('TRANSFER')) return 'TRANSFERENCIA';
   if (t.includes('DEBITO')) return 'CARTAO_DEBITO';
-  if (t.includes('CREDITO')) return 'CARTAO_CREDITO';
-  if (t === 'CARTAO') return 'CARTAO_CREDITO';
-  if (['PIX', 'DINHEIRO', 'BOLETO', 'CARTAO_CREDITO', 'CARTAO_DEBITO'].includes(t)) return t;
+  if (t.includes('CARTAO') && t.includes('CREDITO')) return 'CARTAO_CREDITO';
+  if (['PIX', 'DINHEIRO', 'BOLETO', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'TRANSFERENCIA'].includes(t)) return t;
+
   return 'OUTRO';
 };
+
 const inferStatus = (rawStatus, dueDate) => {
   if (rawStatus === 'PAGO') return 'PAGO';
   if (!dueDate) return rawStatus || 'PENDENTE';
@@ -153,48 +163,48 @@ const ReportsPage = () => {
   const [goals, setGoals] = useState({ monthlyRevenue: 0, monthlyProfit: 0 });
 
   // init
-useEffect(() => {
-  let cancelled = false; // evita setState após unmount / StrictMode
+  useEffect(() => {
+    let cancelled = false; // evita setState após unmount / StrictMode
 
-  const today = new Date();
-  const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
-  const lastDay  = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().slice(0, 10);
-  setStart(firstDay);
-  setEnd(lastDay);
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+    const lastDay  = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().slice(0, 10);
+    setStart(firstDay);
+    setEnd(lastDay);
 
-  (async () => {
-    try {
-      const [company, s, q, p, f, c, r, g] = await Promise.all([
-        api.getCompanyInfo().catch(() => ({})),
-        api.getSales(),
-        api.getQuotes().catch(() => []),
-        api.getProducts(),
-        api.getFinancialEntries(),
-        api.getCustomers().catch(() => []),
-        api.getReturns().catch(() => []),
-        api.getGoals().catch(() => null),
-      ]);
+    (async () => {
+      try {
+        const [company, s, q, p, f, c, r, g] = await Promise.all([
+          api.getCompanyInfo().catch(() => ({})),
+          api.getSales(),
+          api.getQuotes().catch(() => []),
+          api.getProducts(),
+          api.getFinancialEntries(),
+          api.getCustomers().catch(() => []),
+          api.getReturns().catch(() => []),
+          api.getGoals().catch(() => null),
+        ]);
 
-      if (cancelled) return;
+        if (cancelled) return;
 
-      setCompanyInfo(company || null);               // <-- necessário pro Header
-      setLogoBase64(company?.logoBase64 || '');
+        setCompanyInfo(company || null);               // <-- necessário pro Header
+        setLogoBase64(company?.logoBase64 || '');
 
-      setSales(s || []);
-      setQuotes(q || []);
-      setProducts(p || []);
-      setFinancial(f || []);
-      setCustomers(c || []);
-      setReturnsList(r || []);
+        setSales(s || []);
+        setQuotes(q || []);
+        setProducts(p || []);
+        setFinancial(f || []);
+        setCustomers(c || []);
+        setReturnsList(r || []);
 
-      if (g) setGoals({ monthlyRevenue: g.monthlyRevenue || 0, monthlyProfit: g.monthlyProfit || 0 });
-    } finally {
-      if (!cancelled) setLoading(false);
-    }
-  })();
+        if (g) setGoals({ monthlyRevenue: g.monthlyRevenue || 0, monthlyProfit: g.monthlyProfit || 0 });
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
 
-  return () => { cancelled = true; };
-}, []);
+    return () => { cancelled = true; };
+  }, []);
 
   /* =================== Derivados por período =================== */
   const salesInPeriod = useMemo(
@@ -202,6 +212,7 @@ useEffect(() => {
     [sales, start, end]
   );
 
+  /* ---- Parcelas no período (inclui método "CREDITO" virtual do backend) ---- */
   const paymentsInPeriod = useMemo(() => {
     const rows = [];
     (sales || []).forEach((s) => {
@@ -216,7 +227,7 @@ useEffect(() => {
           parcela: i + 1,
           dueDate: due,
           amount: Number(p.amount || p.valor || 0),
-          method,
+          method, // agora pode ser 'CREDITO'
           status: inferStatus(p.status, due),
         });
       });
@@ -233,12 +244,45 @@ useEffect(() => {
   const receivableByMethod = useMemo(() => {
     const acc = {};
     paymentsInPeriod
-      .filter((p) => p.status !== 'PAGO')
+      .filter((p) => p.status !== 'PAGO') // foco em a receber (pendente/vencido); linhas de CREDITO normalmente vêm como PAGO
       .forEach((p) => {
         acc[p.method] = (acc[p.method] || 0) + p.amount;
       });
     return acc;
   }, [paymentsInPeriod]);
+
+  /* === NOVO: Crédito do Cliente no período ===
+   * - Utilizado em vendas: soma das parcelas com method === 'CREDITO'
+   * - Gerado por devoluções: soma das devoluções com resolution === 'CREDITO'
+   */
+  const creditUsedRows = useMemo(
+    () => paymentsInPeriod.filter((p) => p.method === 'CREDITO'),
+    [paymentsInPeriod]
+  );
+  const creditUsedTotal = useMemo(
+    () => sum(creditUsedRows.map((r) => r.amount)),
+    [creditUsedRows]
+  );
+
+  const creditGeneratedRows = useMemo(() => {
+    const list = (returnsList || []).filter(
+      (r) =>
+        withinRange(r.createdAt || r.created_at, start, end) &&
+        String(r.resolution || r.type || r.tipo || '').toUpperCase() === 'CREDITO'
+    );
+    return list.map((r) => ({
+      id: r.id,
+      date: r.createdAt || r.created_at,
+      customerName: r.customerName || r.customer_name || '-',
+      // tenta várias chaves de valor; ajuste conforme seu backend
+      amount: Number(r.total ?? r.amount ?? r.value ?? 0),
+    }));
+  }, [returnsList, start, end]);
+
+  const creditGeneratedTotal = useMemo(
+    () => sum(creditGeneratedRows.map((r) => r.amount)),
+    [creditGeneratedRows]
+  );
 
   // vendas por cliente
   const salesByCustomer = useMemo(() => {
@@ -398,40 +442,40 @@ useEffect(() => {
   }, [sales]);
 
   /* =================== UI comuns =================== */
-const Header = (
-  <div className="flex justify-between items-start">
-    <h1 className="text-3xl font-bold text-base-900 print:text-black">Relatórios</h1>
+  const Header = (
+    <div className="flex justify-between items-start">
+      <h1 className="text-3xl font-bold text-base-900 print:text-black">Relatórios</h1>
 
-    <div className="flex items-start gap-4">
-      {(companyInfo?.logoBase64 || logoBase64) && (
-        <img
-          src={companyInfo?.logoBase64 || logoBase64}
-          alt="Logo da empresa"
-          className="w-24 h-auto object-contain"
-        />
-      )}
+      <div className="flex items-start gap-4">
+        {(companyInfo?.logoBase64 || logoBase64) && (
+          <img
+            src={companyInfo?.logoBase64 || logoBase64}
+            alt="Logo da empresa"
+            className="w-24 h-auto object-contain"
+          />
+        )}
 
-      {(companyInfo &&
-        (companyInfo.name ||
-          companyInfo.address ||
-          companyInfo.phone ||
-          companyInfo.email ||
-          companyInfo.cnpj ||
-          (Array.isArray(companyInfo.companySocials) && companyInfo.companySocials.length > 0))) && (
-        <div className="text-sm leading-tight text-base-700 print:text-black">
-          {companyInfo.name && <p className="font-semibold">{companyInfo.name}</p>}
-          {companyInfo.address && <p>{companyInfo.address}</p>}
-          {companyInfo.phone && <p>{companyInfo.phone}</p>}
-          {companyInfo.email && <p>{companyInfo.email}</p>}
-          {companyInfo.cnpj && <p>CNPJ: {companyInfo.cnpj}</p>}
-          {Array.isArray(companyInfo.companySocials) && companyInfo.companySocials.length > 0 && (
-            <p>Redes: {companyInfo.companySocials.filter(Boolean).join(' • ')}</p>
-          )}
-        </div>
-      )}
+        {(companyInfo &&
+          (companyInfo.name ||
+            companyInfo.address ||
+            companyInfo.phone ||
+            companyInfo.email ||
+            companyInfo.cnpj ||
+            (Array.isArray(companyInfo.companySocials) && companyInfo.companySocials.length > 0))) && (
+          <div className="text-sm leading-tight text-base-700 print:text-black">
+            {companyInfo.name && <p className="font-semibold">{companyInfo.name}</p>}
+            {companyInfo.address && <p>{companyInfo.address}</p>}
+            {companyInfo.phone && <p>{companyInfo.phone}</p>}
+            {companyInfo.email && <p>{companyInfo.email}</p>}
+            {companyInfo.cnpj && <p>CNPJ: {companyInfo.cnpj}</p>}
+            {Array.isArray(companyInfo.companySocials) && companyInfo.companySocials.length > 0 && (
+              <p>Redes: {companyInfo.companySocials.filter(Boolean).join(' • ')}</p>
+            )}
+          </div>
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
 
 
   /* ======== Filtro por período (reuso em várias abas) ======== */
@@ -454,138 +498,136 @@ const Header = (
   );
 
   /* ======== Filtros de Estoque (multiselect com tags) ======== */
-const FiltersBarEstoque = (
-  <Card className='mb-4 print:hidden'>
-    {/* 1ª linha: filtros + ações (ações ocultas na impressão) */}
-    <div className="grid grid-cols-1 m-auto md:grid-cols-3 gap-4 items-center">
-      {/* MARCA (multi) */}
-      <div>
-        <label htmlFor="filterBrands" className="block mb-1 text-sm">Marca</label>
-        <select
-          ref={brandRef}
-          id="filterBrands"
-          multiple
-          multiselect-search="true"
-          multiselect-select-all="true"
-          multiselect-max-items="3"
-          className="w-full"
-          onChange={handleMultiChange(setFilterBrands)}
-        >
-          {uniqueBrands.map((m) => (
-            <option key={m} value={m}>{m}</option>
+  const FiltersBarEstoque = (
+    <Card className='mb-4 print:hidden'>
+      {/* 1ª linha: filtros + ações (ações ocultas na impressão) */}
+      <div className="grid grid-cols-1 m-auto md:grid-cols-3 gap-4 items-center">
+        {/* MARCA (multi) */}
+        <div>
+          <label htmlFor="filterBrands" className="block mb-1 text-sm">Marca</label>
+          <select
+            ref={brandRef}
+            id="filterBrands"
+            multiple
+            multiselect-search="true"
+            multiselect-select-all="true"
+            multiselect-max-items="3"
+            className="w-full"
+            onChange={handleMultiChange(setFilterBrands)}
+          >
+            {uniqueBrands.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* TIPO/CATEGORIA (multi) */}
+        <div>
+          <label htmlFor="filterTypes" className="block mb-1 text-sm">Tipo/Categoria</label>
+          <select
+            ref={typeRef}
+            id="filterTypes"
+            multiple
+            multiselect-search="true"
+            multiselect-select-all="true"
+            multiselect-max-items="3"
+            className="w-full "
+            onChange={handleMultiChange(setFilterTypes)}
+          >
+            {uniqueTypes.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Ações no topo (direita) */}
+        <div className="flex gap-2 print:hidden">
+          <Button onClick={() => window.print()} variant="secondary" title="Imprimir">
+            <PrintIcon /> Imprimir
+          </Button>
+
+          <Button
+            onClick={() => {
+              const headers = ['Produto', 'SKU', 'Qtd', 'Mínimo', 'Status'];
+              const rows = filteredProducts.map((p) => [
+                p.name,
+                p.sku,
+                p.quantity,
+                p.minStock ?? p.min_stock ?? 0,
+                Number(p.quantity || 0) <= Number(p.minStock ?? p.min_stock ?? 0) ? 'Abaixo do mínimo' : 'OK',
+              ]);
+
+              const csv = [headers.join(';'), ...rows.map((r) => r.join(';'))].join('\n');
+              const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = 'posicao_estoque.csv';
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            title="Exportar CSV"
+          >
+            <DownloadIcon /> Exportar CSV
+          </Button>
+        </div>
+      </div>
+
+      {/* 2ª linha: tags (esquerda) + limpar (direita) — oculta na impressão */}
+      <div className=" grid grid-cols-1 md:grid-cols-3 gap-2 items-start print:hidden">
+        {/* Tags selecionadas ocupam 2 colunas */}
+        <div className="md:col-span-2 flex flex-wrap items-center gap-2">
+          {filterBrands.map((b) => (
+            <span key={`b-${b}`} className="inline-flex items-center gap-2 bg-base-100 px-2 py-1 rounded-lg text-sm">
+              {b}
+              <button
+                className="text-danger-600"
+                title="Remover"
+                onClick={() => {
+                  const next = filterBrands.filter((x) => x !== b);
+                  setFilterBrands(next);
+                  if (brandRef.current) {
+                    const opt = Array.from(brandRef.current.options).find((o) => o.value === b);
+                    if (opt) opt.selected = false;
+                    brandRef.current.dispatchEvent(new Event('change', { bubbles: true }));
+                  }
+                }}
+              >
+                ×
+              </button>
+            </span>
           ))}
-        </select>
-      </div>
 
-      {/* TIPO/CATEGORIA (multi) */}
-      <div>
-        <label htmlFor="filterTypes" className="block mb-1 text-sm">Tipo/Categoria</label>
-        <select
-          ref={typeRef}
-          id="filterTypes"
-          multiple
-          multiselect-search="true"
-          multiselect-select-all="true"
-          multiselect-max-items="3"
-          className="w-full "
-          onChange={handleMultiChange(setFilterTypes)}
-        >
-          {uniqueTypes.map((t) => (
-            <option key={t} value={t}>{t}</option>
+          {filterTypes.map((t) => (
+            <span key={`t-${t}`} className="inline-flex items-center gap-2 bg-base-100 px-2 py-1 rounded-lg text-sm">
+              {t}
+              <button
+                className="text-danger-600"
+                title="Remover"
+                onClick={() => {
+                  const next = filterTypes.filter((x) => x !== t);
+                  setFilterTypes(next);
+                  if (typeRef.current) {
+                    const opt = Array.from(typeRef.current.options).find((o) => o.value === t);
+                    if (opt) opt.selected = false;
+                    typeRef.current.dispatchEvent(new Event('change', { bubbles: true }));
+                  }
+                }}
+              >
+                ×
+              </button>
+            </span>
           ))}
-        </select>
+        </div>
       </div>
-
-      {/* Ações no topo (direita) */}
-      <div className="flex gap-2 print:hidden">
-        <Button onClick={() => window.print()} variant="secondary" title="Imprimir">
-          <PrintIcon /> Imprimir
-        </Button>
-
-        <Button
-          onClick={() => {
-            const headers = ['Produto', 'SKU', 'Qtd', 'Mínimo', 'Status'];
-            const rows = filteredProducts.map((p) => [
-              p.name,
-              p.sku,
-              p.quantity,
-              p.minStock ?? p.min_stock ?? 0,
-              Number(p.quantity || 0) <= Number(p.minStock ?? p.min_stock ?? 0) ? 'Abaixo do mínimo' : 'OK',
-            ]);
-
-            const csv = [headers.join(';'), ...rows.map((r) => r.join(';'))].join('\n');
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'posicao_estoque.csv';
-            a.click();
-            URL.revokeObjectURL(url);
-          }}
-          title="Exportar CSV"
-        >
-          <DownloadIcon /> Exportar CSV
-        </Button>
-      </div>
-    </div>
-
-    {/* 2ª linha: tags (esquerda) + limpar (direita) — oculta na impressão */}
-    <div className=" grid grid-cols-1 md:grid-cols-3 gap-2 items-start print:hidden">
-      {/* Tags selecionadas ocupam 2 colunas */}
-      <div className="md:col-span-2 flex flex-wrap items-center gap-2">
-        {filterBrands.map((b) => (
-          <span key={`b-${b}`} className="inline-flex items-center gap-2 bg-base-100 px-2 py-1 rounded-lg text-sm">
-            {b}
-            <button
-              className="text-danger-600"
-              title="Remover"
-              onClick={() => {
-                const next = filterBrands.filter((x) => x !== b);
-                setFilterBrands(next);
-                if (brandRef.current) {
-                  const opt = Array.from(brandRef.current.options).find((o) => o.value === b);
-                  if (opt) opt.selected = false;
-                  brandRef.current.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-              }}
-            >
-              ×
-            </button>
-          </span>
-        ))}
-
-        {filterTypes.map((t) => (
-          <span key={`t-${t}`} className="inline-flex items-center gap-2 bg-base-100 px-2 py-1 rounded-lg text-sm">
-            {t}
-            <button
-              className="text-danger-600"
-              title="Remover"
-              onClick={() => {
-                const next = filterTypes.filter((x) => x !== t);
-                setFilterTypes(next);
-                if (typeRef.current) {
-                  const opt = Array.from(typeRef.current.options).find((o) => o.value === t);
-                  if (opt) opt.selected = false;
-                  typeRef.current.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-              }}
-            >
-              ×
-            </button>
-          </span>
-        ))}
-      </div>
-
-
-    </div>
       {/* Botão limpar à direita */}
       <div className="flex mt-2">
         <button className="text-sm underline" onClick={clearAll}>
           Limpar filtros
         </button>
       </div>
-  </Card>
-);
+    </Card>
+  );
 
 
   /* =================== Blocos por aba =================== */
@@ -608,46 +650,8 @@ const FiltersBarEstoque = (
             label="Itens/Venda"
             value={(sum(salesInPeriod.map((s) => (s.items || []).length)) / Math.max(salesInPeriod.length, 1)).toFixed(2)}
           />
-          <StatBadge label="Devoluções (qtd)" value={(returnsList || []).length} />
+          <StatBadge label="Devoluções (qtd)" value={(returnsList || []).filter((r)=>withinRange(r.createdAt || r.created_at, start, end)).length} />
         </div>
-      </ReportCard>
-
-      <ReportCard
-        title="Top Clientes no Período"
-        right={
-          <Button
-            onClick={() => {
-              const headers = ['Cliente', 'Total (R$)', 'Compras', 'Última Compra'];
-              const rows = salesByCustomer.slice(0, 20).map((c) => [
-                c.name,
-                String((c.total || 0).toFixed(2)).replace('.', ','),
-                c.count,
-                formatDate(c.last),
-              ]);
-              downloadCSV(headers, rows, 'top_clientes.csv');
-            }}
-          >
-            <DownloadIcon /> Exportar CSV
-          </Button>
-        }
-      >
-        <ReportTable headers={['Cliente', 'Total (R$)', 'Compras', 'Última Compra']}>
-          {salesByCustomer.slice(0, 20).map((c) => (
-            <tr key={c.name} className="border-t">
-              <td className="p-2">{c.name}</td>
-              <td className="p-2 text-green-700">{formatCurrency(c.total)}</td>
-              <td className="p-2">{c.count}</td>
-              <td className="p-2">{formatDate(c.last)}</td>
-            </tr>
-          ))}
-          {salesByCustomer.length === 0 && (
-            <tr>
-              <td colSpan={4} className="p-3 text-center text-base-300">
-                Sem dados no período.
-              </td>
-            </tr>
-          )}
-        </ReportTable>
       </ReportCard>
     </>
   );
@@ -656,6 +660,49 @@ const FiltersBarEstoque = (
   const TabFinanceiro = (
     <>
       {FiltersBar}
+
+      {/* NOVO: Crédito do Cliente no período */}
+      <ReportCard
+        title="Crédito do Cliente (período)"
+        right={
+          <div className="flex gap-2">
+            <Button
+              onClick={() => {
+                const headers = ['Venda', 'Cliente', 'Data (parcela)', 'Valor'];
+                const rows = creditUsedRows.map((r) => [
+                  String(r.saleId).slice(0, 8),
+                  r.customerName,
+                  formatDate(r.dueDate),
+                  String((r.amount || 0).toFixed(2)).replace('.', ','),
+                ]);
+                downloadCSV(headers, rows, 'credito_utilizado_vendas.csv');
+              }}
+            >
+              <DownloadIcon /> Exportar “Crédito utilizado”
+            </Button>
+            <Button
+              onClick={() => {
+                const headers = ['Devolução', 'Cliente', 'Data', 'Valor'];
+                const rows = creditGeneratedRows.map((r) => [
+                  String(r.id).slice(0, 8),
+                  r.customerName,
+                  formatDate(r.date),
+                  String((r.amount || 0).toFixed(2)).replace('.', ','),
+                ]);
+                downloadCSV(headers, rows, 'credito_gerado_devolucoes.csv');
+              }}
+            >
+              <DownloadIcon /> Exportar “Crédito gerado”
+            </Button>
+          </div>
+        }
+      >
+        <div className="print:grid print:grid-cols-2 print:gap-4 mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <StatBadge label="Utilizado em vendas" value={formatCurrency(creditUsedTotal)} />
+          <StatBadge label="Gerado por devoluções" value={formatCurrency(creditGeneratedTotal)} />
+        </div>
+      </ReportCard>
+
       <ReportCard title="A Receber por Status (parcelas no período)">
         <div className="print:grid print:grid-cols-3 print:gap-4 mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
           <StatBadge label="Recebido" value={formatCurrency(receivableByStatus.PAGO || 0)} />
@@ -1104,7 +1151,7 @@ const FiltersBarEstoque = (
   const TabMktAtendimento = (
     <>
       {FiltersBar}
-    <ReportCard title="Marketing & Atendimento">
+      <ReportCard title="Marketing & Atendimento">
         <p className="text-sm text-base-300">
           Para métricas completas (CAC, ROI por campanha, FRT/CSAT), habilite endpoints de <code>campaigns</code> e{' '}
           <code>tickets</code> no backend. No momento, os relatórios usam somente dados de vendas (canal/vendedor se
@@ -1122,8 +1169,7 @@ const FiltersBarEstoque = (
     { key: 'funil', label: 'Funil de Vendas', node: TabFunil },
     { key: 'clientes-vendas', label: 'Vendas por Cliente', node: TabClientesVendas },
     { key: 'metas', label: 'Metas & Previsões', node: TabMetas },
-    {key: 'estoque',label: 'Posição de Estoque',node: (TabEstoque),
-    },
+    { key: 'estoque', label: 'Posição de Estoque', node: (TabEstoque) },
     { key: 'analise', label: 'Análise & Desempenho', node: TabAnalise },
     { key: 'operacionais', label: 'Operacionais', node: TabOperacionais },
     { key: 'pipeline', label: 'Vendas & Pipeline', node: TabPipeline },

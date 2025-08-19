@@ -22,6 +22,11 @@ const ReturnForm = ({ onSave, onClose }) => {
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // filtros para facilitar achar a venda
+  const [saleSearch, setSaleSearch] = useState('');
+  const [saleDateFrom, setSaleDateFrom] = useState('');
+  const [saleDateTo, setSaleDateTo] = useState('');
+
   const [selectedSaleId, setSelectedSaleId] = useState('');
   const [itemsToReturn, setItemsToReturn] = useState({});
   const [reason, setReason] = useState('');
@@ -32,7 +37,8 @@ const ReturnForm = ({ onSave, onClose }) => {
     const fetchSales = async () => {
       try {
         setLoading(true);
-        const salesData = await api.getCompletedSales(); // apenas COMPLETED
+        // Mantemos o método existente — se não tiver, troque por api.getSales({ status: 'COMPLETED' })
+        const salesData = await api.getCompletedSales();
         setSales(salesData || []);
       } catch (error) {
         console.error('Failed to load completed sales for return form', error);
@@ -44,14 +50,31 @@ const ReturnForm = ({ onSave, onClose }) => {
     fetchSales();
   }, []);
 
+  // Aplica filtros de busca/período nas vendas
+  const filteredSales = useMemo(() => {
+    const term = saleSearch.trim().toLowerCase();
+    return (sales || []).filter((s) => {
+      const d = new Date(s.createdAt || s.created_at || 0);
+      const okFrom = !saleDateFrom || d >= new Date(`${saleDateFrom}T00:00:00`);
+      const okTo = !saleDateTo || d <= new Date(`${saleDateTo}T23:59:59`);
+
+      const txt =
+        (s.customerName || 'Consumidor Final').toLowerCase() +
+        ' ' +
+        String(s.id || '').toLowerCase();
+
+      const okText = !term || txt.includes(term);
+      return okText && okFrom && okTo;
+    });
+  }, [sales, saleSearch, saleDateFrom, saleDateTo]);
+
   const selectedSale = useMemo(
-    () => sales.find((s) => s.id === selectedSaleId),
-    [sales, selectedSaleId]
+    () => filteredSales.find((s) => s.id === selectedSaleId) || sales.find((s) => s.id === selectedSaleId),
+    [filteredSales, sales, selectedSaleId]
   );
 
   const handleSaleChange = (saleId) => {
     setSelectedSaleId(saleId);
-    // Resetar estado dependente da venda
     setItemsToReturn({});
     setReason('');
   };
@@ -64,7 +87,7 @@ const ReturnForm = ({ onSave, onClose }) => {
   const totalReturnedValue = useMemo(() => {
     if (!selectedSale) return 0;
     return Object.entries(itemsToReturn).reduce((total, [productId, qty]) => {
-      const item = selectedSale.items.find((i) => String(i.productId) === String(productId));
+      const item = (selectedSale.items || []).find((i) => String(i.productId) === String(productId));
       return total + (item ? Number(item.price) * Number(qty) : 0);
     }, 0);
   }, [itemsToReturn, selectedSale]);
@@ -79,7 +102,7 @@ const ReturnForm = ({ onSave, onClose }) => {
     const finalItems = Object.entries(itemsToReturn)
       .filter(([, quantity]) => Number(quantity) > 0)
       .map(([productId, quantity]) => {
-        const saleItem = selectedSale.items.find((i) => String(i.productId) === String(productId));
+        const saleItem = (selectedSale.items || []).find((i) => String(i.productId) === String(productId));
         if (!saleItem) return null;
         return {
           productId,
@@ -101,13 +124,17 @@ const ReturnForm = ({ onSave, onClose }) => {
 
     try {
       setSaving(true);
+      // IMPORTANTE:
+      // - REEMBOLSO: backend gera despesa financeira automaticamente na criação.
+      // - CREDITO: backend cria registro em CustomerCredit automaticamente.
+      // Não é necessário "process_refund" após isso.
       await api.addReturn({
         saleId: selectedSale.id,
         items: finalItems,
         reason,
-        resolution,
+        resolution, // 'REEMBOLSO' ou 'CREDITO'
       });
-      onSave(); // o pai fecha modal, recarrega lista e mostra sucesso
+      onSave();
     } catch (err) {
       console.error(err);
       alert(`Erro ao registrar devolução: ${err?.response?.data?.error || err?.message || 'Desconhecido'}`);
@@ -126,7 +153,44 @@ const ReturnForm = ({ onSave, onClose }) => {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Seleção de venda */}
+      {/* FILTROS para facilitar encontrar a venda */}
+      <Card className="!p-4">
+        <h3 className="font-semibold mb-3">Filtrar Vendas</h3>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+          <div className="md:col-span-2">
+            <Input
+              id="saleSearch"
+              label="Buscar por Cliente ou Nº da Venda"
+              placeholder="Ex.: Maria, 7b0c-..."
+              value={saleSearch}
+              onChange={(e) => setSaleSearch(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="text-sm block mb-1">Data inicial</label>
+            <input
+              type="date"
+              value={saleDateFrom}
+              onChange={(e) => setSaleDateFrom(e.target.value)}
+              className="px-3 py-2 border border-base-200 rounded-xl text-sm w-full"
+            />
+          </div>
+          <div>
+            <label className="text-sm block mb-1">Data final</label>
+            <input
+              type="date"
+              value={saleDateTo}
+              onChange={(e) => setSaleDateTo(e.target.value)}
+              className="px-3 py-2 border border-base-200 rounded-xl text-sm w-full"
+            />
+          </div>
+        </div>
+        <p className="text-xs text-base-400 mt-2">
+          Dica: deixe as datas em branco para listar todas as vendas concluídas.
+        </p>
+      </Card>
+
+      {/* Seleção de venda (lista já filtrada acima) */}
       <div>
         <label htmlFor="sale" className="block text-sm font-medium text-base-300 mb-1">
           Venda Original
@@ -141,22 +205,22 @@ const ReturnForm = ({ onSave, onClose }) => {
           <option value="" disabled>
             Selecione uma venda para devolução
           </option>
-          {sales.map((s) => (
+          {filteredSales.map((s) => (
             <option key={s.id} value={s.id}>
-              #{String(s.id).slice(0, 5)} - {s.customerName}{' '}
-              {s.createdAt ? `(${formatDate(s.createdAt)})` : ''}
+              #{String(s.id).slice(0, 5)} - {s.customerName || 'Consumidor Final'}
+              {s.createdAt ? ` (${formatDate(s.createdAt)})` : ''}
             </option>
           ))}
         </select>
       </div>
 
-      {/* Itens da venda para marcar devolução */}
+      {/* Itens para devolver */}
       {selectedSale && (
         <>
           <Card className="!p-4 bg-primary-50/50 border border-primary-100">
             <h3 className="font-bold text-lg mb-3 text-primary-800">Itens a Devolver</h3>
             <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
-              {selectedSale.items.map((item) => {
+              {(selectedSale.items || []).map((item) => {
                 const maxQ = Number(item.quantity) || 0;
                 const current = Number(itemsToReturn[String(item.productId)] || 0);
                 const subtotal = current * Number(item.price || 0);
@@ -197,7 +261,7 @@ const ReturnForm = ({ onSave, onClose }) => {
               })}
             </div>
             <div className="text-right mt-4 font-bold text-lg text-primary-900">
-              Valor a ser Devolvido: {formatCurrency(totalReturnedValue)}
+              Valor da Devolução: {formatCurrency(totalReturnedValue)}
             </div>
           </Card>
 
@@ -232,8 +296,8 @@ const ReturnForm = ({ onSave, onClose }) => {
               </select>
               <p className="text-xs text-base-300 mt-2">
                 {resolution === 'REEMBOLSO'
-                  ? 'Será gerada uma despesa no financeiro.'
-                  : 'O crédito deverá ser controlado manualmente.'}
+                  ? 'Ao salvar, será criada uma despesa no financeiro referente ao reembolso.'
+                  : 'Ao salvar, o crédito é gerado automaticamente para o cliente e poderá ser usado em novas vendas.'}
               </p>
             </div>
           </div>

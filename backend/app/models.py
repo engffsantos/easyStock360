@@ -1,3 +1,4 @@
+# backend/app/models.py
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import uuid
@@ -12,8 +13,9 @@ def generate_sku():
     # Gerador de SKU simplificado com base na data/hora atual
     return f"SKU-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
 
+
 # -----------------------------
-# Customer (mantido)
+# Customer
 # -----------------------------
 class Customer(db.Model):
     __tablename__ = 'customers'
@@ -32,11 +34,12 @@ class Customer(db.Model):
             'cpfCnpj': self.cpf_cnpj,
             'phone': self.phone,
             'address': self.address,
-            'createdAt': self.created_at.isoformat()
+            'createdAt': self.created_at.isoformat() if self.created_at else None
         }
 
+
 # -----------------------------
-# CustomerInteraction (mantido)
+# CustomerInteraction
 # -----------------------------
 class CustomerInteraction(db.Model):
     __tablename__ = 'customer_interactions'
@@ -47,8 +50,9 @@ class CustomerInteraction(db.Model):
     notes = db.Column(db.Text, nullable=False)
     date = db.Column(db.DateTime, default=datetime.utcnow)
 
+
 # -----------------------------
-# Product (ATUALIZADO)
+# Product
 # -----------------------------
 class Product(db.Model):
     __tablename__ = 'products'
@@ -64,13 +68,14 @@ class Product(db.Model):
     min_stock = db.Column(db.Integer, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # NOVO: status lógico (ativo/inativo)
+    # Status lógico (ativo/inativo)
     is_active = db.Column(db.Boolean, nullable=False, default=True, server_default=text('1'))
 
     history = db.relationship('ProductHistory', backref='product', lazy=True)
 
+
 # -----------------------------
-# ProductHistory (mantido)
+# ProductHistory
 # -----------------------------
 class ProductHistory(db.Model):
     __tablename__ = 'product_history'
@@ -82,8 +87,9 @@ class ProductHistory(db.Model):
     old_value = db.Column(db.String, nullable=True)
     new_value = db.Column(db.String, nullable=True)
 
+
 # -----------------------------
-# Sale (ATUALIZADO)
+# Sale
 # -----------------------------
 class Sale(db.Model):
     __tablename__ = 'sales'
@@ -93,14 +99,14 @@ class Sale(db.Model):
     customer_name = db.Column(db.String, nullable=False)
     status = db.Column(db.String, nullable=False)  # QUOTE | COMPLETED | CANCELLED
 
-    # Novos campos financeiros
+    # Campos financeiros
     subtotal = db.Column(db.Float, nullable=False, default=0.0)
     discount_type = db.Column(db.String, nullable=True)   # 'PERCENT' | 'VALUE' | None
     discount_value = db.Column(db.Float, nullable=False, default=0.0)  # percentual ou valor
     freight = db.Column(db.Float, nullable=False, default=0.0)
     total = db.Column(db.Float, nullable=False, default=0.0)
 
-    # Pagamento (NOVO)
+    # Pagamento (opcional)
     payment_method = db.Column(db.String, nullable=True)  # PIX|DINHEIRO|CARTAO_CREDITO|CARTAO_DEBITO|BOLETO
     installments = db.Column(db.Integer, nullable=True)   # número de parcelas
 
@@ -112,8 +118,9 @@ class Sale(db.Model):
     items = db.relationship('SaleItem', backref='sale', lazy=True)
     payments = db.relationship('SalePayment', backref='sale', lazy=True, order_by='SalePayment.due_date')
 
+
 # -----------------------------
-# SaleItem (mantido)
+# SaleItem
 # -----------------------------
 class SaleItem(db.Model):
     __tablename__ = 'sale_items'
@@ -125,8 +132,9 @@ class SaleItem(db.Model):
     quantity = db.Column(db.Integer, nullable=False)
     price = db.Column(db.Float, nullable=False)
 
+
 # -----------------------------
-# SalePayment (NOVO)
+# SalePayment
 # -----------------------------
 class SalePayment(db.Model):
     __tablename__ = 'sale_payments'
@@ -139,23 +147,25 @@ class SalePayment(db.Model):
     status = db.Column(db.String, nullable=False, default='PENDENTE')  # PENDENTE|PAGO|CANCELADO
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+
 # -----------------------------
-# FinancialEntry (mantido)
+# FinancialEntry
 # -----------------------------
 class FinancialEntry(db.Model):
     __tablename__ = 'financial_entries'
 
     id = db.Column(db.String, primary_key=True, default=generate_uuid)
-    type = db.Column(db.String, nullable=False)
+    type = db.Column(db.String, nullable=False)            # RECEITA | DESPESA
     description = db.Column(db.String, nullable=False)
     amount = db.Column(db.Float, nullable=False)
     due_date = db.Column(db.Date, nullable=False)
-    payment_method = db.Column(db.String, nullable=False)
+    payment_method = db.Column(db.String, nullable=False)  # PIX|DINHEIRO|...
     status = db.Column(db.String, nullable=False, default='PENDENTE')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+
 # -----------------------------
-# ReportGoals (mantido)
+# ReportGoals
 # -----------------------------
 class ReportGoals(db.Model):
     __tablename__ = 'report_goals'
@@ -165,8 +175,9 @@ class ReportGoals(db.Model):
     monthly_profit = db.Column(db.Float, nullable=False, default=0.0)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+
 # -----------------------------
-# CompanySettings (mantido)
+# CompanySettings
 # -----------------------------
 class CompanySettings(db.Model):
     __tablename__ = 'company_settings'
@@ -198,8 +209,9 @@ class CompanySettings(db.Model):
             'updatedAt': self.updated_at.isoformat() if self.updated_at else None
         }
 
+
 # =====================================================================
-# Devoluções (Return / ReturnItem) e (Opcional) CustomerCredit
+# Devoluções (Return / ReturnItem) e Créditos (CustomerCredit)
 # =====================================================================
 
 class Return(db.Model):
@@ -221,6 +233,7 @@ class Return(db.Model):
     customer = db.relationship('Customer', backref='returns')
     items = db.relationship('ReturnItem', backref='return_parent', cascade='all, delete-orphan', lazy=True)
 
+
 class ReturnItem(db.Model):
     __tablename__ = 'return_items'
 
@@ -234,6 +247,7 @@ class ReturnItem(db.Model):
 
     product = db.relationship('Product')
 
+
 class CustomerCredit(db.Model):
     __tablename__ = 'customer_credits'
 
@@ -245,5 +259,16 @@ class CustomerCredit(db.Model):
     balance = db.Column(db.Float, nullable=False)  # saldo disponível
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
-    customer = db.relationship('Customer')
-    ret = db.relationship('Return')
+    # Relações úteis
+    customer = db.relationship('Customer', backref=db.backref('credits', lazy='dynamic'))
+    ret = db.relationship('Return')  # se quiser, pode usar backref('credit', uselist=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "customerId": self.customer_id,
+            "returnId": self.return_id,
+            "amount": float(self.amount or 0.0),
+            "balance": float(self.balance or 0.0),
+            "createdAt": self.created_at.isoformat() if self.created_at else None,
+        }

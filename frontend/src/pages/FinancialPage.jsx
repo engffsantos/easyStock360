@@ -2,9 +2,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '../api/api';
 import { Card, Input, ModalWrapper, Spinner } from '../components/common';
-import { PlusIcon, TrashIcon, DollarSignIcon } from '../components/icons';
+import { PlusIcon, DollarSignIcon } from '../components/icons';
 
-// Botões dinâmicos
+/* ===========================
+ *  Botões
+ * =========================== */
 const PrimaryButton = ({ children, onClick, type = 'button', className = '', ...props }) => (
   <button
     type={type}
@@ -28,6 +30,9 @@ const SecondaryButton = ({ children, onClick, type = 'button', className = '', .
   </button>
 );
 
+/* ===========================
+ *  Utilitários
+ * =========================== */
 const parseISOWithTZ = (s) => {
   if (!s) return new Date();
   if (!/Z|[+\-]\d{2}:\d{2}$/.test(s)) return new Date(`${s}Z`);
@@ -58,12 +63,15 @@ const TinyStat = ({ label, value }) => (
   </div>
 );
 
+/** Mapeamento de rótulos (inclui TRANSFERENCIA e CREDITO) */
 const METHOD_LABEL = {
   PIX: 'PIX',
   DINHEIRO: 'Dinheiro',
   CARTAO_CREDITO: 'Crédito',
   CARTAO_DEBITO: 'Débito',
   BOLETO: 'Boleto',
+  TRANSFERENCIA: 'Transferência',
+  CREDITO: 'Crédito do Cliente', // linha virtual vinda do backend para o recibo
 };
 
 const STATUS_OPTIONS = ['PENDENTE', 'VENCIDO', 'PAGO'];
@@ -78,7 +86,9 @@ function inferStatus(rawStatus, dueDate) {
   return d < now ? 'VENCIDO' : 'PENDENTE';
 }
 
-/** -------------------- FORMS DE CRIAÇÃO -------------------- */
+/* ===========================
+ *  Forms de criação
+ * =========================== */
 const ExpenseForm = ({ onSave, onClose, isSaving }) => {
   const [formData, setFormData] = useState({
     description: '',
@@ -99,9 +109,7 @@ const ExpenseForm = ({ onSave, onClose, isSaving }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (validate()) {
-      onSave({ ...formData, type: 'DESPESA' });
-    }
+    if (validate()) onSave({ ...formData, type: 'DESPESA' });
   };
 
   return (
@@ -123,10 +131,8 @@ const ExpenseForm = ({ onSave, onClose, isSaving }) => {
           onChange={(e) => setFormData((p) => ({ ...p, paymentMethod: e.target.value }))}
           className="w-full bg-white border border-base-200 rounded-md shadow-sm p-2 focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-base-400"
         >
-          {['PIX', 'DINHEIRO', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'BOLETO'].map((method) => (
-            <option key={method} value={method}>
-              {method.replace('_', ' ')}
-            </option>
+          {['PIX', 'DINHEIRO', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'BOLETO', 'TRANSFERENCIA'].map((method) => (
+            <option key={method} value={method}>{METHOD_LABEL[method] || method.replace('_', ' ')}</option>
           ))}
         </select>
       </div>
@@ -159,9 +165,7 @@ const ReceivableForm = ({ onSave, onClose, isSaving }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (validate()) {
-      onSave({ ...formData, type: 'RECEITA' });
-    }
+    if (validate()) onSave({ ...formData, type: 'RECEITA' });
   };
 
   return (
@@ -183,10 +187,8 @@ const ReceivableForm = ({ onSave, onClose, isSaving }) => {
           onChange={(e) => setFormData((p) => ({ ...p, paymentMethod: e.target.value }))}
           className="w-full bg-white border border-base-200 rounded-md shadow-sm p-2 focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-base-400"
         >
-          {['PIX', 'DINHEIRO', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'BOLETO'].map((method) => (
-            <option key={method} value={method}>
-              {method.replace('_', ' ')}
-            </option>
+          {['PIX', 'DINHEIRO', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'BOLETO', 'TRANSFERENCIA'].map((method) => (
+            <option key={method} value={method}>{METHOD_LABEL[method] || method.replace('_', ' ')}</option>
           ))}
         </select>
       </div>
@@ -199,7 +201,10 @@ const ReceivableForm = ({ onSave, onClose, isSaving }) => {
   );
 };
 
-/** -------------------- MAPEA SALES → RECEITAS -------------------- */
+/* ===========================
+ *  Mapear vendas → receitas
+ *  (agora aceita paymentMethod "CREDITO" virtual)
+ * =========================== */
 function mapSalesToReceivables(sales) {
   const receivables = [];
   sales.forEach((s) => {
@@ -215,7 +220,7 @@ function mapSalesToReceivables(sales) {
           amount: Number(p.amount || 0),
           dueDate: p.dueDate || s.createdAt,
           createdAt: s.createdAt,
-          paymentMethod: p.paymentMethod || fallbackMethod,
+          paymentMethod: p.paymentMethod || fallbackMethod, // pode ser "CREDITO" (virtual, PAGO)
           type: 'RECEITA',
           status: inferStatus(p.status, p.dueDate),
           __source: 'sale_payment',
@@ -243,7 +248,7 @@ function mapSalesToReceivables(sales) {
   return receivables;
 }
 
-// Exporta CSV simples (agora respeita o tipo da aba)
+/** Exporta CSV genérico de lançamentos */
 function exportCSV(rows, filename = 'lancamentos.csv') {
   const headers = ['Tipo', 'Descrição', 'Vencimento', 'Valor', 'Status', 'Forma', 'Origem', 'Referência'];
   const lines = [
@@ -274,7 +279,30 @@ function exportCSV(rows, filename = 'lancamentos.csv') {
   URL.revokeObjectURL(url);
 }
 
-/** -------------------- MODAL DE EDIÇÃO -------------------- */
+/** Exporta CSV do painel de créditos por cliente */
+function exportCreditsCSV(rows, filename = 'creditos_clientes.csv') {
+  const headers = ['Cliente', 'Saldo de Crédito', 'Última Movimentação'];
+  const lines = [
+    headers.join(','),
+    ...rows.map((r) => [
+      (r.name || '').replace(/,/g, ' '),
+      String(Number(r.balance || 0).toFixed(2)).replace('.', ','),
+      r.lastMovement ? formatDate(r.lastMovement) : '-',
+    ].join(',')),
+  ].join('\n');
+
+  const blob = new Blob([lines], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ===========================
+ *  Modal de edição (parcial)
+ * =========================== */
 const EditEntryModal = ({ isOpen, onClose, entry, onSubmit, isSaving }) => {
   if (!isOpen || !entry) return null;
 
@@ -291,9 +319,8 @@ const EditEntryModal = ({ isOpen, onClose, entry, onSubmit, isSaving }) => {
   const [status, setStatus] = useState(inferStatus(entry.status, entry.dueDate));
 
   // Regras:
-  // - DESPESA manual: pode editar tudo + status
-  // - RECEITA manual: pode editar campos + status
-  // - RECEITA sale_payment: permitir somente status (UI deixa claro)
+  // - DESPESA/RECEITA manual: pode editar campos + status
+  // - RECEITA sale_payment: permitir somente status
   const canEditFields =
     (isDespesa && isManual) ||
     (isReceita && isManual);
@@ -326,7 +353,7 @@ const EditEntryModal = ({ isOpen, onClose, entry, onSubmit, isSaving }) => {
                 onChange={(e) => setPaymentMethod(e.target.value)}
                 className="w-full bg-white border border-base-200 rounded-md shadow-sm p-2 focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-base-400"
               >
-                {['PIX', 'DINHEIRO', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'BOLETO'].map(m => (
+                {['PIX', 'DINHEIRO', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'BOLETO', 'TRANSFERENCIA'].map(m => (
                   <option key={m} value={m}>{METHOD_LABEL[m] || m}</option>
                 ))}
               </select>
@@ -364,7 +391,9 @@ const EditEntryModal = ({ isOpen, onClose, entry, onSubmit, isSaving }) => {
   );
 };
 
-/** -------------------- PÁGINA -------------------- */
+/* ===========================
+ *  Página
+ * =========================== */
 const FinancialPage = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [entries, setEntries] = useState([]);
@@ -387,6 +416,15 @@ const FinancialPage = () => {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [methodFilter, setMethodFilter] = useState('ALL');
 
+  // Créditos de Cliente (NOVO)
+  const [creditsLoading, setCreditsLoading] = useState(false);
+  const [creditsError, setCreditsError] = useState('');
+  const [credits, setCredits] = useState([]); // [{customerId, name, balance, lastMovement}]
+  const [showCreditsPanel, setShowCreditsPanel] = useState(false);
+  const [creditSearch, setCreditSearch] = useState('');
+  const [onlyWithBalance, setOnlyWithBalance] = useState(true);
+
+  /* -------- Dados Financeiros (lançamentos + vendas) -------- */
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
@@ -420,36 +458,92 @@ const FinancialPage = () => {
     }
   }, []);
 
+  /* -------- Créditos de Cliente (balance consolidado) --------
+   * Busca a lista de clientes e, para cada um, consulta o saldo (e histórico)
+   * via api.getCustomerCredits(id). Exibe no Overview.
+   */
+  const fetchCredits = useCallback(async () => {
+    try {
+      setCreditsLoading(true);
+      setCreditsError('');
+      setCredits([]);
+
+      const customers = await api.getCustomers(); // assume já existente
+      if (!Array.isArray(customers) || customers.length === 0) {
+        setCredits([]);
+        return;
+      }
+
+      const results = await Promise.all(
+        customers.map(async (c) => {
+          try {
+            const resp = await api.getCustomerCredits(c.id);
+            const balance = Number(resp?.balance || 0);
+            // tenta extrair a data da última movimentação (criacao/uso do crédito)
+            let lastMovement = null;
+            if (Array.isArray(resp?.entries) && resp.entries.length > 0) {
+              // procura o maior createdAt/updatedAt conhecido
+              const dates = resp.entries
+                .map(e => e.updatedAt || e.createdAt || e.date || null)
+                .filter(Boolean)
+                .map(String);
+              if (dates.length > 0) {
+                lastMovement = dates.sort().slice(-1)[0]; // maior ISO
+              }
+            }
+            return { customerId: c.id, name: c.name || c.fullName || 'Sem nome', balance, lastMovement };
+          } catch {
+            return { customerId: c.id, name: c.name || c.fullName || 'Sem nome', balance: 0, lastMovement: null };
+          }
+        })
+      );
+
+      setCredits(results);
+    } catch (e) {
+      console.error(e);
+      setCreditsError('Falha ao carregar créditos dos clientes.');
+    } finally {
+      setCreditsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    fetchCredits();
+  }, [fetchCredits]);
+
+  /* -------- Ações de lançamentos -------- */
   const handleMarkAsPaid = async (id) => {
     try {
       await api.markFinancialEntryAsPaid(id);
-      fetchData();
     } catch (e) {
       alert(`Falha ao marcar como pago: ${e}`);
+    } finally {
+      fetchData();
     }
   };
 
   const handleReceiveSalePayment = async (paymentId) => {
     try {
       await api.paySalePayment(paymentId);
-      fetchData();
     } catch (e) {
       alert(`Falha ao receber parcela da venda: ${e?.response?.data?.error || e.message}`);
+    } finally {
+      fetchData();
     }
   };
 
   const handleDeleteExpense = async (id) => {
-    if (window.confirm('Tem certeza que deseja excluir esta despesa?')) {
-      try {
-        await api.deleteFinancialEntry(id);
-        fetchData();
-      } catch (e) {
-        alert(`Falha ao excluir despesa: ${e}`);
-      }
+    if (!window.confirm('Tem certeza que deseja excluir esta despesa?')) return;
+    try {
+      await api.deleteFinancialEntry(id);
+    } catch (e) {
+      alert(`Falha ao excluir despesa: ${e}`);
+    } finally {
+      fetchData();
     }
   };
 
@@ -458,11 +552,11 @@ const FinancialPage = () => {
     try {
       await api.addFinancialEntry(data);
       setIsExpenseModalOpen(false);
-      fetchData();
     } catch (e) {
       alert(`Falha ao salvar despesa: ${e}`);
     } finally {
       setIsSaving(false);
+      fetchData();
     }
   };
 
@@ -471,15 +565,15 @@ const FinancialPage = () => {
     try {
       await api.addFinancialEntry(data);
       setIsReceivableModalOpen(false);
-      fetchData();
     } catch (e) {
       alert(`Falha ao salvar receita: ${e}`);
     } finally {
       setIsSaving(false);
+      fetchData();
     }
   };
 
-  /** --------- EDIÇÃO --------- */
+  /* -------- Edição -------- */
   const openEdit = (entry) => {
     setEditEntry(entry);
     setIsEditOpen(true);
@@ -502,27 +596,25 @@ const FinancialPage = () => {
       } else if (editEntry.__source === 'sale_payment' && editEntry.__paymentId) {
         // RECEITAS de venda (parcela)
         if (payload.status === 'PAGO') {
-          // Reutiliza a rota existente de recebimento
           await api.paySalePayment(editEntry.__paymentId);
         } else {
-          // Atualiza status da parcela (novo endpoint)
           await api.updateSalePaymentStatus(editEntry.__paymentId, { status: payload.status });
         }
       } else {
-        // Outros casos (ex.: sale_total) – nada a editar
         alert('Este lançamento não suporta edição.');
       }
 
       setIsEditOpen(false);
       setEditEntry(null);
-      fetchData();
     } catch (e) {
       alert(`Falha ao salvar edição: ${e?.response?.data?.error || e.message}`);
     } finally {
       setIsSaving(false);
+      fetchData();
     }
   };
 
+  /* -------- Helpers UI -------- */
   const statusBadgeClass = (st) => {
     const status = st || 'PENDENTE';
     const map = {
@@ -556,7 +648,9 @@ const FinancialPage = () => {
     [entries, search, dateFrom, dateTo, statusFilter, methodFilter]
   );
 
-  // OVERVIEW
+  /* ===========================
+   *  OVERVIEW + CRÉDITOS
+   * =========================== */
   const renderOverview = () => {
     const totalReceber = entries
       .filter((e) => e.type === 'RECEITA' && inferStatus(e.status, e.dueDate) !== 'PAGO')
@@ -582,6 +676,13 @@ const FinancialPage = () => {
     const vencidasPagar = entries
       .filter((e) => e.type === 'DESPESA' && inferStatus(e.status, e.dueDate) === 'VENCIDO').length;
 
+    // --------- Novo: total de créditos de clientes ---------
+    const creditsFiltered = credits
+      .filter(c => !onlyWithBalance || Number(c.balance || 0) > 0)
+      .filter(c => !creditSearch.trim() || (c.name || '').toLowerCase().includes(creditSearch.trim().toLowerCase()));
+
+    const totalCustomerCredits = creditsFiltered.reduce((sum, c) => sum + Number(c.balance || 0), 0);
+
     const exportAllFiltered = () => {
       // Exporta tudo que passar nos filtros atuais (receita + despesa)
       const term = search.trim().toLowerCase();
@@ -598,6 +699,8 @@ const FinancialPage = () => {
       exportCSV(allVisible, 'financeiro_geral.csv');
     };
 
+    const exportCredits = () => exportCreditsCSV(creditsFiltered);
+
     return (
       <>
         <div className="mb-4 flex flex-wrap gap-2 justify-end">
@@ -606,7 +709,8 @@ const FinancialPage = () => {
           <PrimaryButton onClick={exportAllFiltered}>Exportar CSV</PrimaryButton>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Cards de visão geral + crédito dos clientes */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
           <StatCard title="Saldo Atual (Realizado)" value={formatCurrency(saldo)} className={saldo >= 0 ? 'bg-primary-50' : 'bg-red-50'} />
           <StatCard title="Total a Receber" value={formatCurrency(totalReceber)} />
           <StatCard title="Total a Pagar" value={formatCurrency(totalPagar)} />
@@ -615,12 +719,94 @@ const FinancialPage = () => {
             <p className="text-2xl font-bold text-danger mt-2">{vencidasReceber + vencidasPagar}</p>
             <p className="text-sm text-red-700">{vencidasPagar} a pagar, {vencidasReceber} a receber</p>
           </Card>
+          {/* NOVO: Crédito de Clientes (passivo) */}
+          <StatCard title="Crédito de Clientes (Saldo)" value={creditsLoading ? '...' : formatCurrency(totalCustomerCredits)} className="bg-amber-50" />
         </div>
+
+        {/* Painel detalhado de Crédito de Clientes (colapsável) */}
+        <Card className="mt-6">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <h2 className="text-lg font-semibold">Crédito de Clientes</h2>
+            <div className="flex gap-2 items-center">
+              <label className="text-sm flex items-center gap-2">
+                <input type="checkbox" className="w-4 h-4" checked={showCreditsPanel} onChange={(e) => setShowCreditsPanel(e.target.checked)} />
+                Mostrar detalhes
+              </label>
+              <SecondaryButton onClick={fetchCredits} disabled={creditsLoading}>
+                {creditsLoading ? 'Atualizando...' : 'Atualizar'}
+              </SecondaryButton>
+              <PrimaryButton onClick={exportCredits} disabled={creditsLoading || creditsFiltered.length === 0}>
+                Exportar CSV
+              </PrimaryButton>
+            </div>
+          </div>
+
+          {showCreditsPanel && (
+            <div className="mt-4 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <Input
+                  id="credit_search"
+                  label="Buscar cliente"
+                  placeholder="Ex.: Maria, João..."
+                  value={creditSearch}
+                  onChange={(e) => setCreditSearch(e.target.value)}
+                />
+                <div className="flex items-end">
+                  <label className="text-sm flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4"
+                      checked={onlyWithBalance}
+                      onChange={(e) => setOnlyWithBalance(e.target.checked)}
+                    />
+                    Mostrar somente quem tem saldo
+                  </label>
+                </div>
+                <div className="flex items-end justify-end">
+                  <TinyStat label="Clientes na lista" value={creditsFiltered.length} />
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-base-200">
+                  <thead className="bg-white">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs uppercase">Cliente</th>
+                      <th className="px-4 py-3 text-left text-xs uppercase">Saldo de Crédito</th>
+                      <th className="px-4 py-3 text-left text-xs uppercase">Última Movimentação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {creditsLoading ? (
+                      <tr><td colSpan="3" className="text-center py-8"><Spinner /></td></tr>
+                    ) : creditsError ? (
+                      <tr><td colSpan="3" className="text-danger text-center py-8">{creditsError}</td></tr>
+                    ) : creditsFiltered.length > 0 ? (
+                      creditsFiltered
+                        .sort((a, b) => Number(b.balance || 0) - Number(a.balance || 0))
+                        .map((c) => (
+                          <tr key={c.customerId} className="border-b">
+                            <td className="px-4 py-2">{c.name}</td>
+                            <td className="px-4 py-2 font-semibold">{formatCurrency(c.balance)}</td>
+                            <td className="px-4 py-2">{c.lastMovement ? formatDate(c.lastMovement) : '-'}</td>
+                          </tr>
+                        ))
+                    ) : (
+                      <tr><td colSpan="3" className="text-center py-8">Nenhum cliente encontrado para os filtros.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </Card>
       </>
     );
   };
 
-  // Tabela
+  /* ===========================
+   *  Tabela (Receitas/Despesas)
+   * =========================== */
   const Table = ({ data, type }) => (
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-base-200">
@@ -647,11 +833,9 @@ const FinancialPage = () => {
 
               const isManual = entry.__source === 'manual';
               const isSalePayment = entry.__source === 'sale_payment';
-              const hasRealPaymentId = Boolean(entry.__paymentId); // veio do backend
+              const hasRealPaymentId = Boolean(entry.__paymentId); // id real no backend
 
               // Receber:
-              // - manual (usa /financial/<id>/pay) OU
-              // - parcela de venda com id real (usa /sales/payments/<paymentId>/pay)
               const canReceiveManual = entry.type === 'RECEITA' && status !== 'PAGO' && isManual;
               const canReceiveSale = entry.type === 'RECEITA' && status !== 'PAGO' && isSalePayment && hasRealPaymentId;
 
@@ -699,7 +883,7 @@ const FinancialPage = () => {
 
                       {/* Excluir (somente despesa manual e não paga) */}
                       {canDelete && (
-                        <button onClick={() => handleDeleteExpense(entry.id)} className="bg-red-600" title="Excluir">
+                        <button onClick={() => handleDeleteExpense(entry.id)} className="bg-red-600 text-white px-3 py-2 rounded">
                           Excluir
                         </button>
                       )}
@@ -726,7 +910,9 @@ const FinancialPage = () => {
     </div>
   );
 
-  // Filtros
+  /* ===========================
+   *  Filtros por aba
+   * =========================== */
   const FiltersBar = ({ currentType }) => {
     const filteredCount = useMemo(() => {
       const term = search.trim().toLowerCase();
@@ -812,6 +998,8 @@ const FinancialPage = () => {
               <option value="CARTAO_CREDITO">Cartão de Crédito</option>
               <option value="CARTAO_DEBITO">Cartão de Débito</option>
               <option value="BOLETO">Boleto</option>
+              <option value="TRANSFERENCIA">Transferência</option>
+              <option value="CREDITO">Crédito do Cliente</option>
             </select>
           </div>
         </div>
@@ -831,6 +1019,9 @@ const FinancialPage = () => {
     );
   };
 
+  /* ===========================
+   *  Abas Receber/Pagar
+   * =========================== */
   const renderReceivable = () => {
     const data = filterData('RECEITA');
     return (
@@ -862,6 +1053,9 @@ const FinancialPage = () => {
     );
   };
 
+  /* ===========================
+   *  Conteúdo
+   * =========================== */
   const renderContent = () => {
     if (loading) return <div className="flex justify-center p-12"><Spinner /></div>;
     if (error) return <div className="text-center text-danger p-12">{error}</div>;

@@ -1,13 +1,23 @@
-#backend/app/routes/customers.py
+# backend/app/routes/customers.py
 from flask import Blueprint, request, jsonify
-from app.models import db, Customer, CustomerInteraction,  Sale, SaleItem
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import asc, desc
 import re
+
+from app.models import (
+    db,
+    Customer,
+    CustomerInteraction,
+    Sale,
+    SaleItem,
+    CustomerCredit,   # novo: usado para endpoints de créditos
+)
 
 customers_bp = Blueprint('customers', __name__, url_prefix='/api/customers')
 
+
 # -----------------------------
-# Funções de validação CPF/CNPJ
+# Validações CPF/CNPJ
 # -----------------------------
 def is_valid_cpf(cpf):
     cpf = re.sub(r'[^0-9]', '', cpf)
@@ -35,10 +45,12 @@ def is_valid_cnpj(cnpj):
     return True
 
 def is_valid_cpf_cnpj(value):
+    value = (value or "").strip()
     return is_valid_cpf(value) or is_valid_cnpj(value)
 
+
 # -----------------------------
-# Listar todos os clientes
+# CRUD Clientes
 # -----------------------------
 @customers_bp.route('/', methods=['GET'])
 def list_customers():
@@ -48,12 +60,10 @@ def list_customers():
     except SQLAlchemyError as e:
         return jsonify({'error': 'Erro ao buscar clientes', 'details': str(e)}), 500
 
-# -----------------------------
-# Criar novo cliente
-# -----------------------------
+
 @customers_bp.route('/', methods=['POST'])
 def create_customer():
-    data = request.get_json()
+    data = request.get_json() or {}
 
     required_fields = ['name', 'cpfCnpj', 'phone', 'address']
     missing = [field for field in required_fields if field not in data or not data[field]]
@@ -71,10 +81,10 @@ def create_customer():
 
     try:
         customer = Customer(
-            name=data['name'],
-            cpf_cnpj=data['cpfCnpj'],
-            phone=data['phone'],
-            address=data['address']
+            name=data['name'].strip(),
+            cpf_cnpj=data['cpfCnpj'].strip(),
+            phone=data['phone'].strip(),
+            address=data['address'].strip()
         )
         db.session.add(customer)
         db.session.commit()
@@ -83,27 +93,31 @@ def create_customer():
         db.session.rollback()
         return jsonify({'error': 'Erro ao criar cliente', 'details': str(e)}), 400
 
-# -----------------------------
-# Atualizar cliente existente
-# -----------------------------
+
 @customers_bp.route('/<string:customer_id>', methods=['PUT'])
 def update_customer(customer_id):
     customer = Customer.query.get_or_404(customer_id)
-    data = request.get_json()
+    data = request.get_json() or {}
     try:
-        customer.name = data.get('name', customer.name)
-        customer.cpf_cnpj = data.get('cpfCnpj', customer.cpf_cnpj)
-        customer.phone = data.get('phone', customer.phone)
-        customer.address = data.get('address', customer.address)
+        name = data.get('name', customer.name)
+        cpf_cnpj = data.get('cpfCnpj', customer.cpf_cnpj)
+        phone = data.get('phone', customer.phone)
+        address = data.get('address', customer.address)
+
+        if cpf_cnpj and not is_valid_cpf_cnpj(cpf_cnpj):
+            return jsonify({'error': 'CPF/CNPJ inválido.'}), 400
+
+        customer.name = name
+        customer.cpf_cnpj = cpf_cnpj
+        customer.phone = phone
+        customer.address = address
         db.session.commit()
         return jsonify(customer.to_dict()), 200
     except SQLAlchemyError as e:
         db.session.rollback()
         return jsonify({'error': 'Erro ao atualizar cliente', 'details': str(e)}), 400
 
-# -----------------------------
-# Remover cliente
-# -----------------------------
+
 @customers_bp.route('/<string:customer_id>', methods=['DELETE'])
 def delete_customer(customer_id):
     customer = Customer.query.get_or_404(customer_id)
@@ -115,30 +129,33 @@ def delete_customer(customer_id):
         db.session.rollback()
         return jsonify({'error': 'Erro ao remover cliente', 'details': str(e)}), 400
 
+
 # -----------------------------
-# Listar interações de um cliente
+# Interações do Cliente
 # -----------------------------
 @customers_bp.route('/<string:customer_id>/interactions/', methods=['GET'])
 def list_interactions(customer_id):
     customer = Customer.query.get_or_404(customer_id)
-    interactions = CustomerInteraction.query.filter_by(customer_id=customer.id).order_by(CustomerInteraction.date.desc()).all()
-
+    interactions = (
+        CustomerInteraction.query
+        .filter_by(customer_id=customer.id)
+        .order_by(CustomerInteraction.date.desc())
+        .all()
+    )
     return jsonify([
         {
             'id': i.id,
             'type': i.type,
             'notes': i.notes,
-            'date': i.date.isoformat()
+            'date': i.date.isoformat() if i.date else None
         } for i in interactions
     ]), 200
 
-# -----------------------------
-# Adicionar nova interação
-# -----------------------------
+
 @customers_bp.route('/<string:customer_id>/interactions/', methods=['POST'])
 def add_interaction(customer_id):
     customer = Customer.query.get_or_404(customer_id)
-    data = request.get_json()
+    data = request.get_json() or {}
 
     required_fields = ['type', 'notes']
     missing = [f for f in required_fields if f not in data or not data[f]]
@@ -158,64 +175,113 @@ def add_interaction(customer_id):
         db.session.rollback()
         return jsonify({'error': 'Erro ao salvar interação.', 'details': str(e)}), 400
 
+
 # -----------------------------
-# Listar compras de um cliente
+# Compras do Cliente
 # -----------------------------
 @customers_bp.route('/<string:customer_id>/purchases/', methods=['GET'])
 def list_purchases(customer_id):
     customer = Customer.query.get_or_404(customer_id)
-    purchases = Sale.query.filter_by(customer_id=customer.id).order_by(Sale.created_at.desc()).all()
-
+    purchases = (
+        Sale.query
+        .filter_by(customer_id=customer.id)
+        .order_by(Sale.created_at.desc())
+        .all()
+    )
     return jsonify([
         {
             'id': sale.id,
-            'total': sale.total,
+            'total': float(sale.total or 0),
             'status': sale.status,
-            'createdAt': sale.created_at.isoformat(),
+            'createdAt': sale.created_at.isoformat() if sale.created_at else None,
             'items': [
                 {
                     'productName': item.product_name,
-                    'quantity': item.quantity,
-                    'price': item.price,
-                    'subtotal': item.quantity * item.price
+                    'quantity': int(item.quantity),
+                    'price': float(item.price),
+                    'subtotal': float(item.quantity) * float(item.price),
                 } for item in sale.items
             ]
         } for sale in purchases
     ]), 200
 
+
 # -----------------------------
-# Listar créditos do cliente
+# Créditos do Cliente
 # -----------------------------
-@customers_bp.route('/<string:customer_id>/credits/', methods=['GET'])
+@customers_bp.get("/<customer_id>/credits/")
 def get_customer_credits(customer_id):
     """
-    Retorna o saldo total de créditos e as entradas de crédito do cliente.
-    Caso o modelo CustomerCredit não exista no projeto, retorna saldo 0.
+    Retorna saldo total e histórico de créditos do cliente.
     """
-    # Garante que o cliente existe
     Customer.query.get_or_404(customer_id)
-
-    # Tenta importar o modelo opcional
-    try:
-        from app.models import CustomerCredit
-    except Exception:
-        return jsonify({"totalBalance": 0.0, "entries": []}), 200
 
     credits = (
         CustomerCredit.query
         .filter_by(customer_id=customer_id)
-        .order_by(CustomerCredit.created_at.desc())
+        .order_by(asc(CustomerCredit.created_at))
         .all()
     )
-    total = sum(float(c.balance or 0) for c in credits)
+    total_balance = float(sum((c.balance or 0.0) for c in credits))
 
     return jsonify({
-        "totalBalance": total,
+        "customerId": customer_id,
+        "balance": total_balance,
+        "totalBalance": total_balance,  # alias de compatibilidade
         "entries": [{
             "id": c.id,
-            "amount": float(c.amount or 0),
-            "balance": float(c.balance or 0),
+            "amount": float(c.amount or 0.0),
+            "balance": float(c.balance or 0.0),
             "createdAt": c.created_at.isoformat() if c.created_at else None,
             "returnId": c.return_id,
         } for c in credits]
+    }), 200
+
+
+@customers_bp.post("/<customer_id>/credits/liquidate")
+def liquidate_customer_credit(customer_id):
+    """
+    Liquida (abate) valor do crédito do cliente usando política FIFO.
+    Espera JSON: { "amount": number }
+    """
+    Customer.query.get_or_404(customer_id)
+    body = request.get_json(silent=True) or {}
+    amount = float(body.get("amount") or 0.0)
+
+    if amount <= 0:
+        return jsonify({"error": "Valor inválido para liquidação."}), 400
+
+    credits = (
+        CustomerCredit.query
+        .filter_by(customer_id=customer_id)
+        .filter(CustomerCredit.balance > 0.0)
+        .order_by(asc(CustomerCredit.created_at))
+        .all()
+    )
+
+    current_balance = float(sum((c.balance or 0.0) for c in credits))
+    if amount > current_balance + 1e-9:
+        return jsonify({
+            "error": "Saldo de crédito insuficiente.",
+            "available": current_balance
+        }), 400
+
+    remaining = amount
+    used = []
+    for c in credits:
+        if remaining <= 1e-9:
+            break
+        use_now = float(min(c.balance, remaining))
+        c.balance = float(c.balance) - use_now
+        used.append({"creditId": c.id, "used": use_now})
+        remaining -= use_now
+
+    db.session.commit()
+
+    new_balance = max(0.0, current_balance - amount)
+    return jsonify({
+        "ok": True,
+        "customerId": customer_id,
+        "used": used,
+        "newBalance": float(new_balance)
     }), 200

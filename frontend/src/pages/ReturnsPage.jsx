@@ -1,472 +1,351 @@
 // frontend/src/pages/ReturnsPage.jsx
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { api } from '../api/api';
-import { Card, Button, Input, ModalWrapper, Spinner } from '../components/common';
-import { PlusIcon } from '../components/icons';
+import { Card, Input, ModalWrapper, Spinner } from '../components/common';
+import ReturnForm from './ReturnForm';
 
-const formatCurrency = (value) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value || 0));
+/* ----------------------- Utils de formatação ----------------------- */
+const formatCurrency = (v) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v || 0));
 
 const formatDate = (dateString) =>
-  new Intl.DateTimeFormat('pt-BR', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-    timeZone: 'America/Sao_Paulo',
-  }).format(new Date(dateString));
+  dateString
+    ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(dateString))
+    : '-';
 
-const RESOLUTION_LABEL = {
-  REEMBOLSO: 'Reembolso',
-  CREDITO: 'Crédito',
+/* ----------------------- Normalizações robustas ----------------------- */
+/** Normaliza status vindos do backend para {PENDENTE|CONCLUIDA|CANCELADA} */
+const normalizeStatus = (s) => {
+  const t = String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  if (['PENDENTE', 'PENDING', 'ABERTA', 'OPEN'].includes(t)) return 'PENDENTE';
+  if (['CONCLUIDA', 'CONCLUIDA', 'CONCLUIDO', 'CONCLUIDO', 'COMPLETED', 'DONE', 'FINALIZADA', 'FINALIZADO'].includes(t))
+    return 'CONCLUIDA';
+  if (['CANCELADA', 'CANCELADO', 'CANCELLED', 'CANCELED'].includes(t)) return 'CANCELADA';
+  // fallback: considera como pendente para permitir ações
+  return 'PENDENTE';
 };
 
-const StatusBadge = ({ status }) => {
-  const map = {
-    ABERTA: 'bg-blue-100 text-blue-800',
-    CONCLUIDA: 'bg-green-100 text-green-800',
-    CANCELADA: 'bg-gray-100 text-gray-800',
-  };
-  const cls = map[status] || 'bg-gray-100 text-gray-800';
-  return (
-    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${cls}`}>
-      {status}
-    </span>
-  );
+/** Normaliza resolução para {REEMBOLSO|CREDITO} */
+const normalizeResolution = (r) => {
+  const t = String(r || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  if (t.includes('CREDIT')) return 'CREDITO';
+  if (['CREDITO', 'CREDITO_DO_CLIENTE'].includes(t)) return 'CREDITO';
+  return 'REEMBOLSO';
 };
 
-/** ---------- ReturnForm (mantido dentro da página) ---------- */
-const ReturnForm = ({ onSave, onClose }) => {
-  const [sales, setSales] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  const [selectedSaleId, setSelectedSaleId] = useState('');
-  const [itemsToReturn, setItemsToReturn] = useState({});
-  const [reason, setReason] = useState('');
-  const [resolution, setResolution] = useState('REEMBOLSO');
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    const fetchSales = async () => {
-      try {
-        setLoading(true);
-        const salesData = await api.getCompletedSales(); // apenas vendas concluídas
-        setSales(salesData || []);
-      } catch (error) {
-        console.error('Failed to load completed sales for return form', error);
-        alert('Não foi possível carregar as vendas concluídas.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchSales();
-  }, []);
-
-  const selectedSale = useMemo(() => {
-    return sales.find((s) => s.id === selectedSaleId);
-  }, [sales, selectedSaleId]);
-
-  const handleSaleChange = (saleId) => {
-    setSelectedSaleId(saleId);
-    setItemsToReturn({});
-    setReason('');
-  };
-
-  const handleQuantityChange = (productId, quantity, maxQuantity) => {
-    const newQuantity = Math.max(0, Math.min(quantity, maxQuantity));
-    setItemsToReturn((prev) => ({ ...prev, [String(productId)]: newQuantity }));
-  };
-
-  const totalReturnedValue = useMemo(() => {
-    if (!selectedSale) return 0;
-    return Object.entries(itemsToReturn).reduce((total, [productId, qty]) => {
-      const item = selectedSale.items.find((i) => String(i.productId) === String(productId));
-      return total + (item ? Number(item.price) * Number(qty) : 0);
-    }, 0);
-  }, [itemsToReturn, selectedSale]);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!selectedSale) {
-      alert('Selecione uma venda.');
-      return;
-    }
-
-    const finalItems = Object.entries(itemsToReturn)
-      .filter(([, quantity]) => Number(quantity) > 0)
-      .map(([productId, quantity]) => {
-        const saleItem = selectedSale.items.find((i) => String(i.productId) === String(productId));
-        if (!saleItem) return null;
-        return {
-          productId,
-          quantity: Number(quantity),
-          price: Number(saleItem.price),
-          productName: saleItem.productName,
-        };
-      })
-      .filter(Boolean);
-
-    if (finalItems.length === 0) {
-      alert('Selecione pelo menos um item para devolver.');
-      return;
-    }
-    if (!reason.trim()) {
-      alert('O motivo da devolução é obrigatório.');
-      return;
-    }
-
-    try {
-      setSaving(true);
-      await api.addReturn({
-        saleId: selectedSale.id,
-        items: finalItems,
-        reason,
-        resolution,
-      });
-      onSave(); // parent fecha modal, recarrega lista e mostra sucesso
-    } catch (err) {
-      console.error(err);
-      alert(
-        `Erro ao registrar devolução: ${
-          err?.response?.data?.error || err?.message || 'Desconhecido'
-        }`,
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex justify-center p-8"><Spinner /></div>
-    );
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div>
-        <label htmlFor="sale" className="block text-sm font-medium text-base-300 mb-1">
-          Venda Original
-        </label>
-        <select
-          id="sale"
-          value={selectedSaleId}
-          onChange={(e) => handleSaleChange(e.target.value)}
-          required
-          className="w-full bg-white border border-base-200 rounded-md shadow-sm p-2 focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-base-400"
-        >
-          <option value="" disabled>
-            Selecione uma venda para devolução
-          </option>
-          {sales.map((s) => (
-            <option key={s.id} value={s.id}>
-              #{String(s.id).slice(0, 5)} - {s.customerName}{' '}
-              {s.createdAt ? `(${formatDate(s.createdAt)})` : ''}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {selectedSale && (
-        <>
-          <Card className="!p-4 bg-primary-50/50 border border-primary-100">
-            <h3 className="font-bold text-lg mb-3 text-primary-800">Itens a Devolver</h3>
-            <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
-              {selectedSale.items.map((item) => {
-                const maxQ = Number(item.quantity) || 0;
-                const current = Number(itemsToReturn[String(item.productId)] || 0);
-                const subtotal = current * Number(item.price || 0);
-
-                return (
-                  <div
-                    key={String(item.productId)}
-                    className="grid grid-cols-5 items-center gap-3 p-2 bg-white rounded-md"
-                  >
-                    <span className="col-span-3 text-sm font-medium text-base-400">
-                      {item.productName}
-                    </span>
-                    <span className="text-sm text-base-300">Vendido: {maxQ}</span>
-                    <div className="flex flex-col">
-                      <Input
-                        label=""
-                        type="number"
-                        min="0"
-                        step="1"
-                        max={maxQ}
-                        value={String(current)}
-                        onChange={(e) =>
-                          handleQuantityChange(
-                            String(item.productId),
-                            parseInt(e.target.value || '0', 10),
-                            maxQ,
-                          )
-                        }
-                      />
-                      {current > 0 && (
-                        <span className="text-xs text-base-300 mt-1">
-                          Subtotal: <strong>{formatCurrency(subtotal)}</strong>
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="text-right mt-4 font-bold text-lg text-primary-900">
-              Valor a ser Devolvido: {formatCurrency(totalReturnedValue)}
-            </div>
-          </Card>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="reason" className="block text-sm font-medium text-base-300 mb-1">
-                Motivo da Devolução
-              </label>
-              <textarea
-                id="reason"
-                rows={3}
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                className="mt-1 block w-full px-3 py-2 bg-white border border-base-200 rounded-md shadow-sm placeholder-base-200 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm text-base-400"
-                required
-              />
-            </div>
-            <div>
-              <label htmlFor="resolution" className="block text-sm font-medium text-base-300 mb-1">
-                Resolução
-              </label>
-              <select
-                id="resolution"
-                value={resolution}
-                onChange={(e) => setResolution(e.target.value)}
-                className="w-full bg-white border border-base-200 rounded-md shadow-sm p-2 focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-base-400"
-              >
-                <option value="REEMBOLSO">{RESOLUTION_LABEL.REEMBOLSO}</option>
-                <option value="CREDITO">{RESOLUTION_LABEL.CREDITO}</option>
-              </select>
-              <p className="text-xs text-base-300 mt-2">
-                {resolution === 'REEMBOLSO'
-                  ? 'Será gerada uma despesa no financeiro.'
-                  : 'O crédito deverá ser controlado manualmente.'}
-              </p>
-            </div>
-          </div>
-        </>
-      )}
-
-      <div className="flex justify-end gap-3 pt-4 border-t border-base-200 mt-2">
-        <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
-          Cancelar
-        </Button>
-        <Button type="submit" variant="primary" disabled={saving || !selectedSaleId}>
-          {saving ? 'Registrando...' : 'Registrar Devolução'}
-        </Button>
-      </div>
-    </form>
-  );
+const RES_LABEL = { REEMBOLSO: 'Reembolso', CREDITO: 'Crédito' };
+const STATUS_COLORS = {
+  PENDENTE: 'bg-yellow-100 text-yellow-800',
+  CONCLUIDA: 'bg-green-100 text-green-800',
+  CANCELADA: 'bg-red-100 text-red-800',
 };
 
-/** ---------- Página de Devoluções ---------- */
+/* ----------------------- Botões locais ----------------------- */
+const PrimaryButton = ({ children, ...p }) => (
+  <button
+    {...p}
+    className={`px-3 py-2 rounded text-white ${p.className || ''}`}
+    style={{ backgroundColor: 'rgb(var(--color-primary-600))' }}
+  >
+    {children}
+  </button>
+);
+const SecondaryButton = ({ children, ...p }) => (
+  <button {...p} className={`px-3 py-2 rounded bg-base-300 text-base-900 ${p.className || ''}`}>
+    {children}
+  </button>
+);
+const DangerButton = ({ children, ...p }) => (
+  <button {...p} className={`px-3 py-2 rounded bg-red-600 text-white ${p.className || ''}`}>
+    {children}
+  </button>
+);
+
+/** Soma segura do total da devolução (caso backend ainda não envie "total") */
+function sumReturnTotal(ret) {
+  if (typeof ret?.total === 'number') return Number(ret.total);
+  // também tenta 'amount' ou 'value' caso haja variação
+  if (typeof ret?.amount === 'number') return Number(ret.amount);
+  if (typeof ret?.value === 'number') return Number(ret.value);
+  return (ret?.items || []).reduce((acc, it) => acc + Number(it.price || 0) * Number(it.quantity || 0), 0);
+}
+
+/* =======================================================================
+ *  Página de Devoluções
+ * ======================================================================= */
 const ReturnsPage = () => {
-  const [returns, setReturns] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [returns, setReturns] = useState([]);
 
-  // loading por linha de ação (concluir / cancelar)
-  const [actionLoadingId, setActionLoadingId] = useState(null);
+  // modal de nova devolução
+  const [isFormOpen, setIsFormOpen] = useState(false);
 
-  const fetchData = useCallback(async () => {
+  // filtros
+  const [search, setSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [resolutionFilter, setResolutionFilter] = useState('ALL');
+
+  const fetchReturns = useCallback(async () => {
     try {
       setLoading(true);
-      setError(null);
-      const data = await api.getReturns();
-      setReturns(data || []);
+      const list = await api.getReturns();
+      setReturns(Array.isArray(list) ? list : []);
     } catch (e) {
       console.error(e);
-      setError('Falha ao carregar as devoluções.');
+      alert('Falha ao carregar devoluções.');
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchReturns();
+  }, [fetchReturns]);
 
-  const handleSaveSuccess = () => {
-    setIsModalOpen(false);
-    fetchData();
-    alert('Devolução registrada com sucesso!');
-  };
+  /* ----------------------- Filtro com normalização ----------------------- */
+  const filteredReturns = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return (returns || []).filter((r) => {
+      const created = r.createdAt || r.created_at || r.date || null;
+      const d = created ? new Date(created) : null;
 
-  // NOVO: concluir devolução considerando a resolução (REEMBOLSO/CREDITO)
-  const handleCompleteReturn = async (returnId, resolution) => {
-    const ok = window.confirm(
-      resolution === 'REEMBOLSO'
-        ? 'Confirmar conclusão com REEMBOLSO? Uma DESPESA será gerada no financeiro.'
-        : 'Confirmar conclusão desta devolução?'
-    );
-    if (!ok) return;
+      const okFrom = !dateFrom || (d && d >= new Date(`${dateFrom}T00:00:00`));
+      const okTo = !dateTo || (d && d <= new Date(`${dateTo}T23:59:59`));
 
+      const txt =
+        (r.customerName || r.customer_name || '').toLowerCase() +
+        ' ' +
+        String(r.id || '').toLowerCase() +
+        ' ' +
+        String(r.saleId || r.sale_id || '').toLowerCase();
+
+      const okText = !term || txt.includes(term);
+
+      const normStatus = normalizeStatus(r.status);
+      const okStatus = statusFilter === 'ALL' || normStatus === statusFilter;
+
+      const normRes = normalizeResolution(r.resolution || r.type);
+      const okRes = resolutionFilter === 'ALL' || normRes === resolutionFilter;
+
+      return okText && okFrom && okTo && okStatus && okRes;
+    });
+  }, [returns, search, dateFrom, dateTo, statusFilter, resolutionFilter]);
+
+  /* ----------------------- Ações ----------------------- */
+  // Observação: o financeiro/crédito já é tratado na criação (POST /api/returns).
+  // Aqui apenas concluímos/cancelamos via PATCH /api/returns/:id/status.
+  const concludeReturn = async (ret) => {
+    if (!window.confirm('Concluir esta devolução?')) return;
     try {
-      setActionLoadingId(returnId);
-      if (resolution === 'REEMBOLSO') {
-        await api.completeReturnWithRefund(returnId);
-      } else {
-        await api.updateReturnStatus(returnId, 'CONCLUIDA');
-      }
-      await fetchData();
-      alert('Devolução concluída com sucesso!');
-    } catch (err) {
-      console.error(err);
-      alert(`Falha ao concluir devolução: ${err?.response?.data?.error || err.message || 'Erro desconhecido'}`);
-    } finally {
-      setActionLoadingId(null);
+      await api.updateReturnStatus(ret.id, 'CONCLUIDA');
+      await fetchReturns();
+      alert('Devolução concluída com sucesso.');
+    } catch (e) {
+      console.error(e);
+      alert(`Falha ao concluir devolução: ${e?.response?.data?.error || e.message}`);
     }
   };
 
-  // Opcional: cancelar devolução em ABERTA
-  const handleCancelReturn = async (returnId) => {
-    const ok = window.confirm('Tem certeza que deseja cancelar esta devolução?');
-    if (!ok) return;
-
+  const cancelReturn = async (ret) => {
+    if (!window.confirm('Cancelar esta devolução?')) return;
     try {
-      setActionLoadingId(returnId);
-      await api.updateReturnStatus(returnId, 'CANCELADA');
-      await fetchData();
+      await api.updateReturnStatus(ret.id, 'CANCELADA');
+      await fetchReturns();
       alert('Devolução cancelada.');
-    } catch (err) {
-      console.error(err);
-      alert(`Falha ao cancelar devolução: ${err?.response?.data?.error || err.message || 'Erro desconhecido'}`);
-    } finally {
-      setActionLoadingId(null);
+    } catch (e) {
+      console.error(e);
+      alert(`Falha ao cancelar: ${e?.response?.data?.error || e.message}`);
     }
   };
 
-  const renderContent = () => {
-    if (loading) {
-      return (
-        <div className="flex justify-center p-12">
-          <Spinner />
-        </div>
-      );
-    }
-    if (error) {
-      return <div className="text-center text-red-600 p-12">{error}</div>;
-    }
-
-    return (
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-base-200">
-          <thead className="bg-white">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">
-                Data
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">
-                Venda Original
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">
-                Cliente
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">
-                Valor Devolvido
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">
-                Resolução
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">
-                Status
-              </th>
-              {/* NOVA coluna Ações */}
-              <th className="px-6 py-3 text-left text-xs font-medium text-base-300 uppercase tracking-wider">
-                Ações
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-base-200">
-            {returns.length > 0 ? (
-              returns.map((ret) => (
-                <tr key={ret.id}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-base-300">
-                    {ret.createdAt ? formatDate(ret.createdAt) : '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    {/* Opcional: link para o recibo */}
-                    <a
-                      href={`/receipt/${ret.saleId}`}
-                      className="text-primary-700 hover:underline"
-                      title="Abrir recibo"
-                    >
-                      #{String(ret.saleId).slice(0, 5)}
-                    </a>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-base-400">
-                    {ret.customerName || '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-red-600">
-                    {formatCurrency(ret.total)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-base-300">
-                    {RESOLUTION_LABEL[ret.resolution] || ret.resolution}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <StatusBadge status={ret.status} />
-                  </td>
-
-                  {/* AÇÕES */}
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    {ret.status === 'ABERTA' ? (
-                      <div className="flex gap-2">
-                        <Button
-                          variant="primary"
-                          disabled={actionLoadingId === ret.id}
-                          onClick={() => handleCompleteReturn(ret.id, ret.resolution)}
-                        >
-                          {actionLoadingId === ret.id ? 'Processando...' : 'Concluir'}
-                        </Button>
-
-                        {/* Opcional: Cancelar */}
-                        <Button
-                          variant="secondary"
-                          disabled={actionLoadingId === ret.id}
-                          onClick={() => handleCancelReturn(ret.id)}
-                        >
-                          Cancelar
-                        </Button>
-                      </div>
-                    ) : (
-                      <span className="text-base-200">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={7} className="text-center py-12 text-base-300">
-                  Nenhuma devolução registrada.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    );
+  /* ----------------------- UI ----------------------- */
+  const handleClearFilters = () => {
+    setSearch('');
+    setDateFrom('');
+    setDateTo('');
+    setStatusFilter('ALL');
+    setResolutionFilter('ALL');
   };
 
   return (
     <>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-base-400">Devoluções</h1>
-        <Button variant="primary" onClick={() => setIsModalOpen(true)}>
-          <PlusIcon />
-          Registrar Devolução
-        </Button>
+        <PrimaryButton onClick={() => setIsFormOpen(true)}>Nova Devolução</PrimaryButton>
       </div>
 
-      <Card>{renderContent()}</Card>
+      {/* Filtros */}
+      <Card className="!p-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+          <div className="md:col-span-2">
+            <Input
+              id="search"
+              label="Buscar (cliente, ID de devolução ou venda)"
+              placeholder="Ex.: Maria, e9431e..., 7b0c..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
 
-      <ModalWrapper isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Registrar Nova Devolução">
-        <ReturnForm onSave={handleSaveSuccess} onClose={() => setIsModalOpen(false)} />
+          <div>
+            <label className="text-sm block mb-1">Data inicial</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="px-3 py-2 border border-base-200 rounded-xl text-sm w-full"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm block mb-1">Data final</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="px-3 py-2 border border-base-200 rounded-xl text-sm w-full"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm block mb-1">Resolução</label>
+            <select
+              value={resolutionFilter}
+              onChange={(e) => setResolutionFilter(e.target.value)}
+              className="px-3 py-2 border border-base-200 rounded-xl text-sm w-full bg-white"
+            >
+              <option value="ALL">Todas</option>
+              <option value="REEMBOLSO">Reembolso</option>
+              <option value="CREDITO">Crédito</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm block mb-1">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-2 border border-base-200 rounded-xl text-sm w-full bg-white"
+            >
+              <option value="ALL">Todos</option>
+              <option value="PENDENTE">Pendente</option>
+              <option value="CONCLUIDA">Concluída</option>
+              <option value="CANCELADA">Cancelada</option>
+            </select>
+          </div>
+
+          {/* Linha com ações dos filtros */}
+          <div className="md:col-span-5 flex flex-wrap gap-2 items-center">
+            <span className="text-sm text-base-400">
+              Dica: deixe as datas em branco para ver todas as devoluções.
+            </span>
+            <SecondaryButton className="ml-auto" onClick={handleClearFilters}>
+              Limpar filtros
+            </SecondaryButton>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        {loading ? (
+          <div className="flex justify-center p-12">
+            <Spinner />
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-base-200">
+              <thead className="bg-white">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs uppercase">Data</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase">Cliente</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase">Venda</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase">Itens</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase">Total</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase">Resolução</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase">Ações</th>
+                </tr>
+              </thead>
+
+              <tbody className="bg-white divide-y divide-base-200">
+                {filteredReturns.length > 0 ? (
+                  filteredReturns.map((ret) => {
+                    const total = sumReturnTotal(ret);
+                    const created = ret.createdAt || ret.created_at;
+                    const status = normalizeStatus(ret.status);
+                    const res = normalizeResolution(ret.resolution || ret.type);
+
+                    const canAct = status !== 'CONCLUIDA' && status !== 'CANCELADA';
+
+                    return (
+                      <tr key={ret.id}>
+                        <td className="px-4 py-2 text-sm">{formatDate(created)}</td>
+                        <td className="px-4 py-2 text-sm text-base-400">
+                          {ret.customerName || 'Consumidor Final'}
+                        </td>
+                        <td className="px-4 py-2 text-sm">{String(ret.saleId || '').slice(0, 8)}</td>
+                        <td className="px-4 py-2 text-sm">{(ret.items || []).length}</td>
+                        <td className="px-4 py-2 text-sm font-semibold text-primary-800">
+                          {formatCurrency(total)}
+                        </td>
+                        <td className="px-4 py-2 text-sm">
+                          <span className="px-2 py-1 rounded bg-base-100 border border-base-200">
+                            {RES_LABEL[res] || res}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 text-sm">
+                          <span className={`px-2 py-1 rounded ${STATUS_COLORS[status] || 'bg-base-100'}`}>
+                            {status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2">
+                          <div className="flex gap-2 flex-wrap">
+                            {canAct ? (
+                              <>
+                                <PrimaryButton onClick={() => concludeReturn(ret)}>Concluir</PrimaryButton>
+                                <DangerButton onClick={() => cancelReturn(ret)}>Cancelar</DangerButton>
+                              </>
+                            ) : (
+                              <SecondaryButton title="Sem ações disponíveis" disabled>
+                                —
+                              </SecondaryButton>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={8} className="text-center py-12">
+                      Nenhuma devolução encontrada com os filtros aplicados.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {/* Modal: Nova Devolução */}
+      <ModalWrapper
+        isOpen={isFormOpen}
+        onClose={() => setIsFormOpen(false)}
+        title="Registrar Devolução"
+      >
+        <div className="p-1">
+          <ReturnForm
+            onSave={() => {
+              setIsFormOpen(false);
+              fetchReturns();
+              alert('Devolução registrada com sucesso.');
+            }}
+            onClose={() => setIsFormOpen(false)}
+          />
+        </div>
       </ModalWrapper>
     </>
   );
