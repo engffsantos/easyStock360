@@ -24,12 +24,17 @@ const SecondaryButton = ({ children, ...props }) => (
   </button>
 );
 
+/**
+ * 🔧 Mudanças principais:
+ * - Removido campo "email" do formulário e das validações (não existe no banco).
+ * - Ao SALVAR em modo edição, incluímos "id" no payload para que o CustomersPage faça UPDATE.
+ */
 const CustomerForm = ({ customer, onSave, onClose, isSaving }) => {
   const [formData, setFormData] = useState({
+    id: null,        // <— novo: manter id quando editar
     name: '',
     cpfCnpj: '',
     phone: '',
-    email: '',
     street: '',
     number: '',
     district: '',
@@ -44,16 +49,24 @@ const CustomerForm = ({ customer, onSave, onClose, isSaving }) => {
       const [street = '', number = '', district = '', city = '', state = '', zip = ''] =
         (customer.address || '').split(',').map(s => s.trim());
       setFormData({
+        id: customer.id || null,           // <— preserva id
         name: customer.name || '',
         cpfCnpj: customer.cpfCnpj || '',
         phone: customer.phone || '',
-        email: customer.email || '',
         street, number, district, city, state, zip
       });
     } else {
       setFormData({
-        name: '', cpfCnpj: '', phone: '', email: '',
-        street: '', number: '', district: '', city: '', state: '', zip: ''
+        id: null,
+        name: '',
+        cpfCnpj: '',
+        phone: '',
+        street: '',
+        number: '',
+        district: '',
+        city: '',
+        state: '',
+        zip: ''
       });
     }
     setErrors({});
@@ -66,9 +79,6 @@ const CustomerForm = ({ customer, onSave, onClose, isSaving }) => {
     else if (!/^\d{11}$|^\d{14}$/.test(formData.cpfCnpj.replace(/\D/g, '')))
       newErrors.cpfCnpj = 'CPF/CNPJ inválido.';
     if (!formData.phone.trim()) newErrors.phone = 'Telefone é obrigatório.';
-    if (!formData.email.trim()) newErrors.email = 'E-mail é obrigatório.';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
-      newErrors.email = 'E-mail inválido.';
     if (!formData.street.trim()) newErrors.street = 'Logradouro é obrigatório.';
     if (!formData.number.trim()) newErrors.number = 'Número é obrigatório.';
     if (!formData.city.trim()) newErrors.city = 'Cidade é obrigatória.';
@@ -82,10 +92,11 @@ const CustomerForm = ({ customer, onSave, onClose, isSaving }) => {
     if (validate()) {
       const address = `${formData.street}, ${formData.number}, ${formData.district}, ${formData.city}, ${formData.state}, ${formData.zip}`;
       onSave({
+        // 🔑 Se estiver editando, enviamos id
+        ...(formData.id ? { id: formData.id } : {}),
         name: formData.name.trim(),
         cpfCnpj: formData.cpfCnpj.replace(/\D/g, ''),
         phone: formData.phone.trim(),
-        email: formData.email.trim(),
         address
       });
     }
@@ -116,8 +127,7 @@ const CustomerForm = ({ customer, onSave, onClose, isSaving }) => {
       <Input id="phone" name="phone" label="Telefone" type="tel" value={formData.phone} onChange={handleChange} required />
       {errors.phone && <p className="text-danger text-sm">{errors.phone}</p>}
 
-      <Input id="email" name="email" label="E-mail" type="email" value={formData.email} onChange={handleChange} required />
-      {errors.email && <p className="text-danger text-sm">{errors.email}</p>}
+      {/* Removido: campo e-mail */}
 
       <Input id="street" name="street" label="Logradouro" value={formData.street} onChange={handleChange} required />
       {errors.street && <p className="text-danger text-sm">{errors.street}</p>}

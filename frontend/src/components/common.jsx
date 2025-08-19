@@ -10,7 +10,7 @@ export const Card = ({ children, className = '' }) => (
 export const Button = ({ children, variant = 'primary', className = '', ...props }) => {
   const base = 'inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition';
   const variants = {
-    primary: 'bg-primary-700 text-white hover:bg-primary-800',
+    primary: 'bg-primary-700 text-white hover:bg-primary-500',
     secondary: 'bg-base-100 text-base-400 border border-base-300 hover:bg-base-50',
     danger: 'bg-red-500 text-white hover:bg-red-600',
   };
